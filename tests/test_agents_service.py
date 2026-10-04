@@ -19,10 +19,10 @@ SERVICE = ROOT / "scripts" / "agents_service.py"
 
 @pytest.fixture
 def env(tmp_path):
-    return {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", "WORKFLOW_COPILOT_NO_LAUNCHD": "1",
-            "WORKFLOW_COPILOT_LAUNCHD_PLIST": str(tmp_path / "LaunchAgents" / "com.workflowcopilot.agents-proxy.plist"),
-            "WORKFLOW_COPILOT_RUNTIME_DIR": str(tmp_path / "runtime"), "WORKFLOW_COPILOT_AGENTS_PORT": "8799",
-            "WORKFLOW_COPILOT_LOG_DIR": str(tmp_path / "logs"), "WORKFLOW_COPILOT_STATE_DIR": str(tmp_path / "state")}
+    return {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", "MODELMATCH_NO_LAUNCHD": "1",
+            "MODELMATCH_LAUNCHD_PLIST": str(tmp_path / "LaunchAgents" / "com.modelmatch.agents-proxy.plist"),
+            "MODELMATCH_RUNTIME_DIR": str(tmp_path / "runtime"), "MODELMATCH_AGENTS_PORT": "8799",
+            "MODELMATCH_LOG_DIR": str(tmp_path / "logs"), "MODELMATCH_STATE_DIR": str(tmp_path / "state")}
 
 
 def run(env, *args):
@@ -38,8 +38,8 @@ def test_install_writes_plist_that_runs_from_its_own_copy(tmp_path, env):
     runtime = tmp_path / "runtime"
     code, out = run(env, "install")
     assert code == 0, out
-    data = plistlib.loads(Path(env["WORKFLOW_COPILOT_LAUNCHD_PLIST"]).read_bytes())
-    assert data["Label"] == "com.workflowcopilot.agents-proxy"
+    data = plistlib.loads(Path(env["MODELMATCH_LAUNCHD_PLIST"]).read_bytes())
+    assert data["Label"] == "com.modelmatch.agents-proxy"
     assert data["KeepAlive"] is True and data["RunAtLoad"] is True
     args = data["ProgramArguments"]
     assert args[0] == str(runtime / "venv" / "bin" / "python")
@@ -47,7 +47,7 @@ def test_install_writes_plist_that_runs_from_its_own_copy(tmp_path, env):
     assert "8799" in args and args[-2:] == ["--ws", "none"]
     assert data["WorkingDirectory"] == str(runtime / "app")
     assert data["StandardOutPath"].startswith(str(runtime / "logs"))
-    assert data["EnvironmentVariables"]["WORKFLOW_COPILOT_LOG_DIR"] == str(runtime / "logs")
+    assert data["EnvironmentVariables"]["MODELMATCH_LOG_DIR"] == str(runtime / "logs")
     # nothing the service needs lives in the (possibly Desktop) project folder
     for value in [args[0], data["WorkingDirectory"], data["StandardOutPath"]]:
         assert str(ROOT) not in value
@@ -79,12 +79,12 @@ def test_uninstall_removes_plist_and_only_its_own_folder(tmp_path, env):
     assert run(env, "install")[0] == 0
     assert json.loads(run(env, "status")[1])["installed"] is True
     code, out = run(env, "uninstall")
-    assert code == 0 and not Path(env["WORKFLOW_COPILOT_LAUNCHD_PLIST"]).exists() and not runtime.exists()
+    assert code == 0 and not Path(env["MODELMATCH_LAUNCHD_PLIST"]).exists() and not runtime.exists()
 
     stranger = tmp_path / "somebody-elses-folder"  # not ours (no marker): never deleted
     stranger.mkdir()
     (stranger / "keep.txt").write_text("mine")
-    env["WORKFLOW_COPILOT_RUNTIME_DIR"] = str(stranger)
+    env["MODELMATCH_RUNTIME_DIR"] = str(stranger)
     assert run(env, "uninstall")[0] == 0
     assert (stranger / "keep.txt").read_text() == "mine"
 
@@ -108,15 +108,15 @@ def test_service_environment_can_be_built_and_runs_the_proxy(tmp_path, env):
         [str(runtime / "venv" / "bin" / "python"), "-m", "uvicorn", "proxy.agents.app:create_app", "--factory",
          "--host", "127.0.0.1", "--port", str(port), "--log-level", "warning", "--ws", "none"],
         cwd=str(runtime / "app"), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", "WORKFLOW_COPILOT_LOG_DIR": str(runtime / "logs"),
-             "WORKFLOW_COPILOT_AGENTS_STATE_FILE": str(runtime / "state" / "s.json")})
+        env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", "MODELMATCH_LOG_DIR": str(runtime / "logs"),
+             "MODELMATCH_AGENTS_STATE_FILE": str(runtime / "state" / "s.json")})
     try:
         import time
         import urllib.request
         for _ in range(60):
             try:
                 with urllib.request.urlopen("http://127.0.0.1:{}/health".format(port), timeout=1) as response:
-                    assert json.loads(response.read())["service"] == "workflow-copilot-agents-proxy"
+                    assert json.loads(response.read())["service"] == "modelmatch-agents-proxy"
                     return
             except OSError:
                 time.sleep(0.2)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safely add/remove Workflow Copilot entries in Claude Code settings files.
+"""Safely add/remove ModelMatch entries in Claude Code settings files.
 
   settings_tool.py install   (--global | PROJECT_DIR) [--no-routing]
   settings_tool.py uninstall (--global | PROJECT_DIR)
@@ -12,7 +12,7 @@ Scopes
                which applies to EVERY Claude Code session of this user.
 
 Safety
-  * Only entries whose command mentions workflow_copilot_hook.py are touched.
+  * Only entries whose command mentions modelmatch_hook.py are touched.
   * ANTHROPIC_BASE_URL is removed only if it still points at our proxy, and is never
     overwritten if something else (settings or shell startup files) already sets it.
   * Every file is backed up (<file>.bak-<timestamp>) before it is changed.
@@ -27,10 +27,10 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-MARKER = "workflow_copilot_hook.py"
+MARKER = "modelmatch_hook.py"
 EVENTS = {
-    "SessionStart": {"timeout": 30, "statusMessage": "Workflow Copilot: starting..."},
-    "UserPromptSubmit": {"timeout": 120, "statusMessage": "Workflow Copilot: choosing the best model..."},
+    "SessionStart": {"timeout": 30, "statusMessage": "ModelMatch: starting..."},
+    "UserPromptSubmit": {"timeout": 120, "statusMessage": "ModelMatch: choosing the best model..."},
 }
 SHELL_FILES = (".zshrc", ".zprofile", ".zshenv", ".bashrc", ".bash_profile", ".profile")
 
@@ -137,7 +137,7 @@ def set_routing(settings, scope):
     existing = env.get("ANTHROPIC_BASE_URL")
     if existing and existing.rstrip("/") != url:
         print("  NOT enabling routing: ANTHROPIC_BASE_URL is already set to {}".format(existing))
-        print("  (set WORKFLOW_COPILOT_UPSTREAM_URL={} in .env and re-run to chain them)".format(existing))
+        print("  (set MODELMATCH_UPSTREAM_URL={} in .env and re-run to chain them)".format(existing))
         return False
     if existing:
         print("  model routing already on ({})".format(existing))
@@ -147,7 +147,7 @@ def set_routing(settings, scope):
         if shells:
             print("  NOT enabling routing: ~/{} already sets ANTHROPIC_BASE_URL, and routing every".format(shells[0]))
             print("  session would override it. Hooks are installed, so you get recommendations only.")
-            print("  (to chain them: set WORKFLOW_COPILOT_UPSTREAM_URL=<that url> in .env and re-run)")
+            print("  (to chain them: set MODELMATCH_UPSTREAM_URL=<that url> in .env and re-run)")
             return False
     env["ANTHROPIC_BASE_URL"] = url
     settings["env"] = env
@@ -204,9 +204,9 @@ def uninstall(scope, project_dir):
     if removed or (cleared and same_file):
         save(hooks_file, settings)
     if removed:
-        print("  removed {} Workflow Copilot hook(s) from {}".format(removed, hooks_file))
+        print("  removed {} ModelMatch hook(s) from {}".format(removed, hooks_file))
     else:
-        print("  no Workflow Copilot hooks in {}".format(hooks_file))
+        print("  no ModelMatch hooks in {}".format(hooks_file))
     if cleared:
         if not same_file:
             save(env_file, env_settings)

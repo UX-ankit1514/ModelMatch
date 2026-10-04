@@ -1,6 +1,6 @@
-"""Clients that ask Workflow Copilot for ONE best-fit model.
+"""Clients that ask ModelMatch for ONE best-fit model.
 
-* MockRouter          - local heuristics, used when WORKFLOW_COPILOT_API_URL is empty.
+* MockRouter          - local heuristics, used when MODELMATCH_API_URL is empty.
 * CloudRouteClient    - the planned production contract:
                           POST /api/route  {"prompt": "...", "client": "claude-code"}
                           -> {"recommended_model": "...", "reason": "...", "confidence": 0.0}
@@ -125,7 +125,7 @@ class _CloudClient:
         raise NotImplementedError
 
     async def recommend(self, prompt: str) -> RouterResult:
-        headers = {"Content-Type": "application/json", "User-Agent": "workflow-copilot-claude-code/0.1"}
+        headers = {"Content-Type": "application/json", "User-Agent": "modelmatch-claude-code/0.1"}
         if self.api_key:
             headers["Authorization"] = "Bearer " + self.api_key
         # Send only what routing needs: the (length-capped) prompt.
@@ -134,16 +134,16 @@ class _CloudClient:
             async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
                 response = await client.post(self.url, json=payload, headers=headers)
         except httpx.TimeoutException:
-            raise RouterError("Workflow Copilot API timed out after {:g}s".format(self.timeout))
+            raise RouterError("router API timed out after {:g}s".format(self.timeout))
         except httpx.HTTPError as exc:
-            raise RouterError("could not reach Workflow Copilot API ({})".format(type(exc).__name__))
+            raise RouterError("could not reach router API ({})".format(type(exc).__name__))
 
         if response.status_code != 200:
-            raise RouterError("Workflow Copilot API returned HTTP {}".format(response.status_code))
+            raise RouterError("router API returned HTTP {}".format(response.status_code))
         try:
             data = response.json()
         except ValueError:
-            raise RouterError("Workflow Copilot API returned a non-JSON response")
+            raise RouterError("router API returned a non-JSON response")
         return self._parse(data)
 
 

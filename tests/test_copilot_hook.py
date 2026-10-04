@@ -1,4 +1,4 @@
-"""End-to-end tests of hooks/workflow_copilot_copilot_hook.py (the extension's decision-maker and the
+"""End-to-end tests of hooks/modelmatch_copilot_hook.py (the extension's decision-maker and the
 --hooks-only command hook) against a real agents proxy process."""
 
 import json
@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-HOOK = ROOT / "hooks" / "workflow_copilot_copilot_hook.py"
+HOOK = ROOT / "hooks" / "modelmatch_copilot_hook.py"
 EXTENSION = ROOT / "hooks" / "copilot-extension" / "extension.mjs"
 VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
 SESSION = "f2a2a46d-817b-4137-beeb-7dd08df20c4f"
@@ -31,18 +31,18 @@ def free_port():
 
 
 def base_env(tmp_path, port, **extra):
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("WORKFLOW_COPILOT_", "COPILOT", "CLAUDE"))}
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("MODELMATCH_", "COPILOT", "CLAUDE"))}
     env.update({
-        "WORKFLOW_COPILOT_AGENTS_PORT": str(port),
-        "WORKFLOW_COPILOT_LOG_DIR": str(tmp_path / "logs"),
-        "WORKFLOW_COPILOT_STATE_DIR": str(tmp_path / "state"),
-        "WORKFLOW_COPILOT_AGENTS_STATE_FILE": str(tmp_path / "state" / "agents.json"),
-        "WORKFLOW_COPILOT_CODEX_HOME": str(tmp_path / "codex"),
-        "WORKFLOW_COPILOT_API_URL": "",
-        "WORKFLOW_COPILOT_CONFIRM_UI": "never",
-        "WORKFLOW_COPILOT_CONFIRM_TIMEOUT": "3",
-        "WORKFLOW_COPILOT_DISABLED": "0",
-        "WORKFLOW_COPILOT_NO_LAUNCHD": "1",
+        "MODELMATCH_AGENTS_PORT": str(port),
+        "MODELMATCH_LOG_DIR": str(tmp_path / "logs"),
+        "MODELMATCH_STATE_DIR": str(tmp_path / "state"),
+        "MODELMATCH_AGENTS_STATE_FILE": str(tmp_path / "state" / "agents.json"),
+        "MODELMATCH_CODEX_HOME": str(tmp_path / "codex"),
+        "MODELMATCH_API_URL": "",
+        "MODELMATCH_CONFIRM_UI": "never",
+        "MODELMATCH_CONFIRM_TIMEOUT": "3",
+        "MODELMATCH_DISABLED": "0",
+        "MODELMATCH_NO_LAUNCHD": "1",
     })
     env.update({k: str(v) for k, v in extra.items()})
     return env
@@ -98,7 +98,7 @@ def test_session_start_message(proxy):
     env = base_env(proxy["tmp"], proxy["port"])
     answer = decide({"event": "session_start", "session_id": SESSION, "source": "startup", "model": "claude-sonnet-4.6",
                      "interactive": True, "can_switch": True}, env)
-    assert answer["message"].startswith("Workflow Copilot is on")
+    assert answer["message"].startswith("ModelMatch is on")
     assert session_state(proxy)["start_model"] == "claude-sonnet-4.6"
     assert decide({"event": "session_start", "session_id": SESSION, "source": "resume"}, env) == {}
     old = decide({"event": "session_start", "session_id": SESSION, "source": "new", "can_switch": False}, env)
@@ -106,21 +106,21 @@ def test_session_start_message(proxy):
 
 
 def test_accept_answers_switch(proxy):
-    answer = decide(prompt(), base_env(proxy["tmp"], proxy["port"], WORKFLOW_COPILOT_CONFIRM_UI="auto-accept"))
+    answer = decide(prompt(), base_env(proxy["tmp"], proxy["port"], MODELMATCH_CONFIRM_UI="auto-accept"))
     assert answer["action"] == "switch"
     assert answer["model_id"] == "claude-haiku-4.5" and answer["model_name"] == "Claude Haiku 4.5"
-    assert answer["message"].startswith("Workflow Copilot: running this prompt on Claude Haiku 4.5.")
+    assert answer["message"].startswith("ModelMatch: running this prompt on Claude Haiku 4.5.")
     assert session_state(proxy)["turn"]["accepted"] is True
 
 
 def test_reject_answers_keep(proxy):
-    answer = decide(prompt(), base_env(proxy["tmp"], proxy["port"], WORKFLOW_COPILOT_CONFIRM_UI="never"))
-    assert answer == {"action": "keep", "message": "Workflow Copilot: kept your current model (recommended Claude "
+    answer = decide(prompt(), base_env(proxy["tmp"], proxy["port"], MODELMATCH_CONFIRM_UI="never"))
+    assert answer == {"action": "keep", "message": "ModelMatch: kept your current model (recommended Claude "
                                                    "Haiku 4.5)."}
 
 
 def test_same_model_unavailable_and_old_copilot(proxy):
-    env = base_env(proxy["tmp"], proxy["port"], WORKFLOW_COPILOT_CONFIRM_UI="auto-accept")
+    env = base_env(proxy["tmp"], proxy["port"], MODELMATCH_CONFIRM_UI="auto-accept")
     same = decide(prompt(current="claude-haiku-4.5"), env)
     assert same["action"] == "keep" and "already your current model" in same["message"]
     missing = decide(prompt("wc-test: Grok 9"), env)
@@ -133,7 +133,7 @@ def test_same_model_unavailable_and_old_copilot(proxy):
 
 def test_family_substitution_is_explained(proxy):
     offered = [{"id": "claude-sonnet-4.6", "name": "Claude Sonnet 4.6"}, {"id": "claude-haiku-4.5", "name": "Claude Haiku 4.5"}]
-    env = base_env(proxy["tmp"], proxy["port"], WORKFLOW_COPILOT_CONFIRM_UI="auto-accept")
+    env = base_env(proxy["tmp"], proxy["port"], MODELMATCH_CONFIRM_UI="auto-accept")
     # (Not one of the built-in recommender's own three answers, which stand for sizes, not exact models.)
     answer = decide(prompt("wc-test: Claude Sonnet 4.9", current="claude-haiku-4.5", available_models=offered), env)
     assert answer["model_id"] == "claude-sonnet-4.6"
@@ -141,12 +141,12 @@ def test_family_substitution_is_explained(proxy):
 
 
 def test_scripted_runs_slash_commands_and_pause_keep_quietly(proxy):
-    env = base_env(proxy["tmp"], proxy["port"], WORKFLOW_COPILOT_CONFIRM_UI="auto")
+    env = base_env(proxy["tmp"], proxy["port"], MODELMATCH_CONFIRM_UI="auto")
     assert decide(prompt(interactive=False), env) == {"action": "keep", "message": None}
     assert decide(prompt("/model"), env) == {"action": "keep", "message": None}
-    paused = base_env(proxy["tmp"], proxy["port"], WORKFLOW_COPILOT_COPILOT_DISABLED="1")
+    paused = base_env(proxy["tmp"], proxy["port"], MODELMATCH_COPILOT_DISABLED="1")
     assert decide(prompt(), paused) == {"action": "keep", "message": None}
-    auto = base_env(proxy["tmp"], proxy["port"], WORKFLOW_COPILOT_CONFIRM_UI="auto-accept")
+    auto = base_env(proxy["tmp"], proxy["port"], MODELMATCH_CONFIRM_UI="auto-accept")
     assert decide(prompt(interactive=False), auto)["action"] == "switch"  # explicit opt-in for automation
 
 
@@ -158,7 +158,7 @@ def test_malformed_input_means_keep(proxy, payload):
 
 
 def test_proxy_down_means_keep_quickly(tmp_path):
-    env = base_env(tmp_path, free_port(), WORKFLOW_COPILOT_PYTHON=str(tmp_path / "missing-python"))
+    env = base_env(tmp_path, free_port(), MODELMATCH_PYTHON=str(tmp_path / "missing-python"))
     started = time.monotonic()
     answer = decide(prompt(), env)
     assert answer["action"] == "keep" and "unavailable right now" in answer["message"]
@@ -215,7 +215,7 @@ def test_command_hook_session_start_and_bad_input(proxy):
 
 def test_prompt_mode_detection():
     sys.path.insert(0, str(ROOT / "hooks"))
-    import workflow_copilot_copilot_hook as hook
+    import modelmatch_copilot_hook as hook
     assert hook.copilot_prompt_mode("/opt/homebrew/bin/copilot -p say hello --allow-all-tools")
     assert hook.copilot_prompt_mode("copilot --prompt=hi")
     assert not hook.copilot_prompt_mode("/opt/homebrew/bin/copilot")
@@ -234,4 +234,4 @@ def test_extension_is_valid_javascript():
 def test_extension_never_writes_to_stdout():
     source = EXTENSION.read_text()
     assert "console.log" not in source and "process.stdout" not in source  # stdout is Copilot's JSON-RPC channel
-    assert '"workflow_copilot_copilot_hook.py"' in source and "--extension" in source
+    assert '"modelmatch_copilot_hook.py"' in source and "--extension" in source

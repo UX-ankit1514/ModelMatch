@@ -1,6 +1,6 @@
 """Model catalog and provider adapters.
 
-Recommendation and execution are deliberately separate. Workflow Copilot may
+Recommendation and execution are deliberately separate. ModelMatch may
 recommend any model; a recommendation is only *applied* when an adapter that
 can really serve Claude Code's requests exists for it. Today only the
 Anthropic adapter can do that. Other providers are registered as "not
@@ -73,7 +73,7 @@ _OTHER_PROVIDERS = (
 
 _FAMILY_RE = re.compile(r"\b(fable|opus|sonnet|haiku)\b")
 _API_ID_RE = re.compile(r"^claude-[a-z0-9][a-z0-9.-]*$")
-# Workflow Copilot's analyzer appends a tier ("low", "max", ...). Tiers are
+# ModelMatch's analyzer appends a tier ("low", "max", ...). Tiers are
 # not a user-facing concept in this product, so they are dropped.
 _TIER_RE = re.compile(r"\s+(ultra\s*max|low|medium|high|max)\s*$", re.IGNORECASE)
 
@@ -245,7 +245,7 @@ class AnthropicAdapter(ProviderAdapter):
     def can_route(self, model: ResolvedModel) -> Tuple[bool, str]:
         if model.model_id:
             return True, "Routed through the local proxy to the Anthropic API."
-        return False, "Workflow Copilot named a Claude model this proxy doesn't recognize."
+        return False, "ModelMatch named a Claude model this proxy doesn't recognize."
 
     def apply(self, request_body: dict, model: ResolvedModel) -> dict:
         target = model.model_id

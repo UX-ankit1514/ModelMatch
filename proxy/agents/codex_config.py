@@ -1,4 +1,4 @@
-"""Read the few Codex settings Workflow Copilot needs, without a TOML library.
+"""Read the few Codex settings ModelMatch needs, without a TOML library.
 
 Codex keeps its settings in $CODEX_HOME/config.toml (default ~/.codex/config.toml).
 Only simple top-level `key = value` lines are read (model, openai_base_url,
@@ -20,7 +20,7 @@ _ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "\\": "\\", '
 
 def codex_home(env=None):
     env = os.environ if env is None else env
-    value = env.get("WORKFLOW_COPILOT_CODEX_HOME") or env.get("CODEX_HOME") or str(Path.home() / ".codex")
+    value = env.get("MODELMATCH_CODEX_HOME") or env.get("CODEX_HOME") or str(Path.home() / ".codex")
     return Path(value).expanduser()
 
 

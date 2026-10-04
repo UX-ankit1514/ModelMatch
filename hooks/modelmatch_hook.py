@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Workflow Copilot hook for Claude Code.
+"""ModelMatch hook for Claude Code.
 
 Handles two hook events (dispatching on "hook_event_name" from stdin):
   SessionStart      make sure the local proxy is running and register the session. No routing.
@@ -11,7 +11,7 @@ with code 0, and stdout only ever carries one small JSON object with a
 injected into Claude's context, so nothing else is printed.)
 
 Also usable from the command line (used by the scripts in ../scripts):
-  python3 hooks/workflow_copilot_hook.py --start-proxy | --stop-proxy | --status
+  python3 hooks/modelmatch_hook.py --start-proxy | --stop-proxy | --status
 
 Standard library only, Python 3.7+.
 """
@@ -33,11 +33,11 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
-SERVICE_NAME = "workflow-copilot-proxy"
+SERVICE_NAME = "modelmatch-proxy"
 HOOK_BUDGET_SECONDS = 100  # stays under the 120s timeout set in .claude/settings.json
 CONFIRM_UIS = ("auto", "tty", "dialog", "auto-accept", "never")
 
-log = logging.getLogger("workflow_copilot.hook")
+log = logging.getLogger("modelmatch.hook")
 
 
 class HookDeadline(Exception):
@@ -89,18 +89,18 @@ class Config:
             except ValueError:
                 return float(default)
 
-        self.host = get("WORKFLOW_COPILOT_HOST", "127.0.0.1")
-        self.port = int(number("WORKFLOW_COPILOT_PORT", 8787))
+        self.host = get("MODELMATCH_HOST", "127.0.0.1")
+        self.port = int(number("MODELMATCH_PORT", 8787))
         self.proxy_url = "http://{}:{}".format(self.host, self.port)
-        ui = get("WORKFLOW_COPILOT_CONFIRM_UI", "auto").lower()
+        ui = get("MODELMATCH_CONFIRM_UI", "auto").lower()
         self.confirm_ui = ui if ui in CONFIRM_UIS else "auto"
-        self.confirm_timeout = max(1.0, number("WORKFLOW_COPILOT_CONFIRM_TIMEOUT", 30))
-        self.recommend_timeout = max(2.0, number("WORKFLOW_COPILOT_API_TIMEOUT", 25) + 5)
-        self.disabled = get("WORKFLOW_COPILOT_DISABLED", "0").lower() in ("1", "true", "yes", "on")
-        self.log_prompts = get("WORKFLOW_COPILOT_LOG_PROMPTS", "0").lower() in ("1", "true", "yes", "on")
-        self.log_dir = Path(get("WORKFLOW_COPILOT_LOG_DIR", str(ROOT / "logs")))
-        self.state_dir = Path(get("WORKFLOW_COPILOT_STATE_DIR", str(ROOT / "state")))
-        self.venv_python = Path(get("WORKFLOW_COPILOT_PYTHON", str(ROOT / ".venv" / "bin" / "python")))
+        self.confirm_timeout = max(1.0, number("MODELMATCH_CONFIRM_TIMEOUT", 30))
+        self.recommend_timeout = max(2.0, number("MODELMATCH_API_TIMEOUT", 25) + 5)
+        self.disabled = get("MODELMATCH_DISABLED", "0").lower() in ("1", "true", "yes", "on")
+        self.log_prompts = get("MODELMATCH_LOG_PROMPTS", "0").lower() in ("1", "true", "yes", "on")
+        self.log_dir = Path(get("MODELMATCH_LOG_DIR", str(ROOT / "logs")))
+        self.state_dir = Path(get("MODELMATCH_STATE_DIR", str(ROOT / "state")))
+        self.venv_python = Path(get("MODELMATCH_PYTHON", str(ROOT / ".venv" / "bin" / "python")))
 
 
 def setup_logging(cfg):
@@ -295,7 +295,7 @@ def _confirm_tty(rec, timeout):
             old = termios.tcgetattr(fd)
         except termios.error:
             old = None
-        lines = ["", "  Workflow Copilot", "  Recommended model: " + rec["recommended_model"]]
+        lines = ["", "  ModelMatch", "  Recommended model: " + rec["recommended_model"]]
         if rec.get("recommendation_reason"):
             lines.append("  Reason: " + rec["recommendation_reason"])
         lines += ["", "  Use recommended model? [Y/n] "]
@@ -340,7 +340,7 @@ _DIALOG_SCRIPT = [
     "set theMessage to item 1 of argv",
     "set useLabel to item 2 of argv",
     "set waitSeconds to (item 3 of argv) as integer",
-    'display dialog theMessage with title "Workflow Copilot" buttons {"Keep current", useLabel} '
+    'display dialog theMessage with title "ModelMatch" buttons {"Keep current", useLabel} '
     'default button useLabel cancel button "Keep current" giving up after waitSeconds with icon note',
     "set answer to result",
     'if gave up of answer then return "TIMEOUT"',
@@ -358,7 +358,7 @@ def _confirm_dialog(rec, timeout):
     if rec.get("recommendation_reason"):
         message += "\n\nReason: " + rec["recommendation_reason"]
     if rec.get("substituted_from"):
-        message += "\n\n(Workflow Copilot named " + rec["substituted_from"] + "; this is its current equivalent.)"
+        message += "\n\n(ModelMatch named " + rec["substituted_from"] + "; this is its current equivalent.)"
     message += "\n\nUse this model for this prompt?"
 
     command = ["osascript"]
@@ -404,7 +404,7 @@ def handle_session_start(cfg, data):
 
     if not ensure_proxy(cfg, wait_seconds=8):
         log.warning("fallback triggered | proxy unavailable at session start")
-        message = "Workflow Copilot: the local proxy couldn't start, so there will be no model recommendations."
+        message = "ModelMatch: the local proxy couldn't start, so there will be no model recommendations."
         if routing:
             message += (" Model routing is switched on for this project, so Claude may not reach the API. "
                         "Run: bash \"{}/scripts/doctor.sh\"".format(ROOT))
@@ -421,7 +421,7 @@ def handle_session_start(cfg, data):
 
     if source != "startup":
         return None
-    return "Workflow Copilot is on ({}).".format(
+    return "ModelMatch is on ({}).".format(
         "model routing active" if routing else "recommendations only, routing off")
 
 
@@ -443,7 +443,7 @@ def handle_user_prompt(cfg, data):
 
     if not ensure_proxy(cfg, wait_seconds=5):
         log.warning("fallback triggered | proxy unavailable | keeping current model")
-        return "Workflow Copilot is unavailable right now (local proxy not running). Continuing with your current model."
+        return "ModelMatch is unavailable right now (local proxy not running). Continuing with your current model."
 
     log.info("recommendation request | session=%s", short(session_id))
     try:
@@ -453,17 +453,17 @@ def handle_user_prompt(cfg, data):
                                 timeout=cfg.recommend_timeout)
     except ProxyError as exc:
         log.warning("fallback triggered | recommendation failed: %s | keeping current model", exc)
-        return "Workflow Copilot couldn't get a recommendation ({}). Continuing with your current model.".format(exc)
+        return "ModelMatch couldn't get a recommendation ({}). Continuing with your current model.".format(exc)
     if status != 200 or not isinstance(rec, dict) or not rec.get("ok") or not rec.get("recommended_model"):
         error = rec.get("error") if isinstance(rec, dict) else None
         log.warning("fallback triggered | recommendation failed: HTTP %s %s | keeping current model", status, error or "")
-        return "Workflow Copilot couldn't get a recommendation ({}). Continuing with your current model.".format(
+        return "ModelMatch couldn't get a recommendation ({}). Continuing with your current model.".format(
             error or "HTTP {}".format(status))
 
     name = rec["recommended_model"]
     reason = rec.get("recommendation_reason") or ""
     reason_text = " " + reason if reason else ""
-    substituted = (" (Workflow Copilot named {}; using its current equivalent.)".format(rec["substituted_from"])
+    substituted = (" (ModelMatch named {}; using its current equivalent.)".format(rec["substituted_from"])
                    if rec.get("substituted_from") else "")
     log.info("recommended model | session=%s | %s | routable=%s | same_as_current=%s",
              short(session_id), name, rec.get("routable"), rec.get("same_as_current"))
@@ -481,15 +481,15 @@ def handle_user_prompt(cfg, data):
     if not rec.get("routable"):
         save(False, "unsupported")
         log.info("not applied | %s is not routable: %s", name, rec.get("routing_note"))
-        return "Workflow Copilot recommends {}.{} {} Keeping your current model.".format(
+        return "ModelMatch recommends {}.{} {} Keeping your current model.".format(
             name, reason_text, rec.get("routing_note") or "Automatic routing isn't set up for it.")
     if rec.get("same_as_current"):
         save(False, "already-current")
-        return "Workflow Copilot recommends {}, which is already your current model.".format(name)
+        return "ModelMatch recommends {}, which is already your current model.".format(name)
     if not routing_enabled(cfg):
         save(False, "routing-off")
         log.info("not applied | routing is off for this session (ANTHROPIC_BASE_URL not pointing at the proxy)")
-        return "Workflow Copilot recommends {}.{}{} (Recommendation only: model routing is off for this session.)".format(
+        return "ModelMatch recommends {}.{}{} (Recommendation only: model routing is off for this session.)".format(
             name, reason_text, substituted)
 
     decision, method, detail = confirm(cfg, rec)
@@ -499,17 +499,17 @@ def handle_user_prompt(cfg, data):
              " | " + detail if detail else "")
 
     if accepted and result.get("applied"):
-        return "Workflow Copilot: using {} for this prompt.{}{}".format(name, reason_text, substituted)
+        return "ModelMatch: using {} for this prompt.{}{}".format(name, reason_text, substituted)
     if accepted:
         log.warning("fallback triggered | accepted but the proxy did not apply the route | keeping current model")
-        return "Workflow Copilot couldn't apply {}. Keeping your current model.".format(name)
+        return "ModelMatch couldn't apply {}. Keeping your current model.".format(name)
     if decision == "rejected":
-        return "Workflow Copilot: kept your current model (recommended {}).".format(name)
+        return "ModelMatch: kept your current model (recommended {}).".format(name)
     if decision == "timeout":
-        return "Workflow Copilot: no answer within {:.0f}s, kept your current model (recommended {}).".format(
+        return "ModelMatch: no answer within {:.0f}s, kept your current model (recommended {}).".format(
             cfg.confirm_timeout, name)
     log.warning("fallback triggered | confirmation UI unavailable: %s | keeping current model", detail)
-    return ("Workflow Copilot recommends {}.{} The Use/Keep question couldn't be shown, so your current model "
+    return ("ModelMatch recommends {}.{} The Use/Keep question couldn't be shown, so your current model "
             "was kept.".format(name, reason_text))
 
 
@@ -569,7 +569,7 @@ def run_hook(cfg):
         # the proxy, it must still be running or Claude couldn't reach the API.
         if event in ("SessionStart", "UserPromptSubmit") and routing_enabled(cfg):
             ensure_proxy(cfg, wait_seconds=8 if event == "SessionStart" else 5)
-        log.info("paused via WORKFLOW_COPILOT_DISABLED | %s ignored", event)
+        log.info("paused via MODELMATCH_DISABLED | %s ignored", event)
         return None
     if event in ("SessionStart", "UserPromptSubmit") and not claim(cfg, event, data):
         log.info("skipped | %s already handled by another copy of this hook", event)
@@ -607,7 +607,7 @@ def main(argv):
             health = proxy_health(cfg, timeout=2)
             print(json.dumps(health) if health else "not running")
             return 0 if health else 1
-        print("usage: workflow_copilot_hook.py [--start-proxy | --stop-proxy | --status]  (no args = hook mode)")
+        print("usage: modelmatch_hook.py [--start-proxy | --stop-proxy | --status]  (no args = hook mode)")
         return 2
 
     message = None
@@ -618,7 +618,7 @@ def main(argv):
         message = run_hook(cfg)
     except HookDeadline:
         log.error("fallback triggered | hook ran out of time | keeping current model")
-        message = "Workflow Copilot took too long, so your current model was kept."
+        message = "ModelMatch took too long, so your current model was kept."
     except BaseException:  # fail open on anything, including KeyboardInterrupt
         log.exception("fallback triggered | unexpected hook error | keeping current model")
         message = None

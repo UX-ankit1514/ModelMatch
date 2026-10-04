@@ -1,5 +1,5 @@
 #!/bin/bash
-# Workflow Copilot for Codex CLI - health check. Changes nothing.
+# ModelMatch for Codex CLI - health check. Changes nothing.
 #
 #   bash scripts/doctor_codex.sh [--project DIR]
 set -u
@@ -17,11 +17,11 @@ ok()   { printf "  \xE2\x9C\x85 %s\n" "$*"; }
 warn() { printf "  \xE2\x9A\xA0\xEF\xB8\x8F  %s\n" "$*"; }
 bad()  { printf "  \xE2\x9D\x8C %s\n" "$*"; PROBLEMS=$((PROBLEMS + 1)); }
 fix()  { printf "     fix: %s\n" "$*"; }
-HOOK="$REPO/hooks/workflow_copilot_codex_hook.py"
+HOOK="$REPO/hooks/modelmatch_codex_hook.py"
 TOOL="$REPO/scripts/codex_settings_tool.py"
 jget() { printf '%s' "$1" | python3 -c "import sys,json; v=json.load(sys.stdin).get('$2'); print(','.join(v) if isinstance(v, list) else ('' if v is None else v))" 2>/dev/null; }
 
-echo "Workflow Copilot for Codex - doctor"
+echo "ModelMatch for Codex - doctor"
 echo
 echo "Software"
 if command -v python3 >/dev/null && python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)'; then
@@ -51,10 +51,10 @@ if [ "$GEV" = "SessionStart,UserPromptSubmit" ]; then
 elif [ "$PEV" = "SessionStart,UserPromptSubmit" ]; then
   ok "project $PROJECT: hooks installed"
 else
-  bad "Workflow Copilot hooks not installed"; fix "bash \"$REPO/scripts/install_codex.sh\""
+  bad "ModelMatch hooks not installed"; fix "bash \"$REPO/scripts/install_codex.sh\""
 fi
 echo "     reminder: Codex runs hooks only after you trust them. In Codex, type /hooks and trust the"
-echo "     two 'Workflow Copilot' hooks (needed again if the hook file moves)."
+echo "     two 'ModelMatch' hooks (needed again if the hook file moves)."
 if [ "$(jget "$GSTAT" hooks_feature_disabled)" = "True" ]; then
   bad "hooks are switched off in config.toml ([features] hooks = false)"; fix "remove that line from ~/.codex/config.toml"
 fi
@@ -90,7 +90,7 @@ if [ "$(uname)" = "Darwin" ]; then
       True)
         ok "background service loaded (keeps the proxy running)"
         if [ "$(jget "$SSTAT" runtime_current)" != "True" ]; then
-          warn "the service runs an older copy of Workflow Copilot or of your .env settings"
+          warn "the service runs an older copy of ModelMatch or of your .env settings"
           fix "python3 \"$REPO/scripts/agents_service.py\" restart"
         fi ;;
       False) bad "background service installed but not loaded"; fix "python3 \"$REPO/scripts/agents_service.py\" install" ;;

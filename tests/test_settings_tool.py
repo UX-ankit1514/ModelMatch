@@ -9,11 +9,11 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOL = ROOT / "scripts" / "settings_tool.py"
-MARKER = "workflow_copilot_hook.py"
+MARKER = "modelmatch_hook.py"
 
 
 def tool(*args, home, extra_env=None):
-    env = {"HOME": str(home), "PATH": "/usr/bin:/bin", "WORKFLOW_COPILOT_PORT": "8787"}
+    env = {"HOME": str(home), "PATH": "/usr/bin:/bin", "MODELMATCH_PORT": "8787"}
     env.update(extra_env or {})
     result = subprocess.run([sys.executable, str(TOOL)] + [str(a) for a in args], capture_output=True, text=True,
                             env=env)

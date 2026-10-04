@@ -1,5 +1,5 @@
 #!/bin/bash
-# Workflow Copilot for Claude Code - installer (safe to run more than once).
+# ModelMatch for Claude Code - installer (safe to run more than once).
 #
 #   bash scripts/install.sh                     # this folder only, with model routing
 #   bash scripts/install.sh --global            # EVERY Claude Code session on this Mac
@@ -24,7 +24,7 @@ warn() { printf "  \xE2\x9A\xA0\xEF\xB8\x8F  %s\n" "$*"; }
 fail() { printf "  \xE2\x9D\x8C %s\n" "$*"; exit 1; }
 step() { printf "\n%s\n" "$*"; }
 
-echo "Workflow Copilot - install"
+echo "ModelMatch - install"
 
 step "1/6 Checking Python"
 PY="$(command -v python3)" || fail "python3 not found. Install Apple's command line tools: xcode-select --install"
@@ -54,12 +54,12 @@ ok "Claude Code hooks configured"
 
 step "5/6 Starting the local proxy"
 # Restart so an update always runs the newest code.
-"$PY" "$REPO/hooks/workflow_copilot_hook.py" --stop-proxy >/dev/null 2>&1
-"$PY" "$REPO/hooks/workflow_copilot_hook.py" --start-proxy >/dev/null || fail "proxy did not start - see logs/proxy.out.log"
+"$PY" "$REPO/hooks/modelmatch_hook.py" --stop-proxy >/dev/null 2>&1
+"$PY" "$REPO/hooks/modelmatch_hook.py" --start-proxy >/dev/null || fail "proxy did not start - see logs/proxy.out.log"
 ok "proxy running"
 
 step "6/6 Health check"
-HEALTH="$("$PY" "$REPO/hooks/workflow_copilot_hook.py" --status)" || fail "proxy is not answering"
+HEALTH="$("$PY" "$REPO/hooks/modelmatch_hook.py" --status)" || fail "proxy is not answering"
 ok "proxy healthy: $HEALTH"
 
 echo
@@ -70,5 +70,5 @@ if [ "$GLOBAL" = 1 ]; then
 else
   echo "  1. Quit any Claude Code session in $PROJECT and open a new one (cd \"$PROJECT\" && claude)."
 fi
-echo "  Then type a prompt. A 'Workflow Copilot' popup will suggest a model: click Use or Keep current."
+echo "  Then type a prompt. A 'ModelMatch' popup will suggest a model: click Use or Keep current."
 echo "  Problems? Run: bash \"$REPO/scripts/doctor.sh\""

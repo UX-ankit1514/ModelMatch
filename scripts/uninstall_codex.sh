@@ -1,5 +1,5 @@
 #!/bin/bash
-# Workflow Copilot for Codex CLI - uninstaller.
+# ModelMatch for Codex CLI - uninstaller.
 # Removes ONLY what install_codex.sh added: its two Codex hooks, its openai_base_url line
 # (your previous one is put back), the background service, and (with --purge) its own logs
 # and state files. Every Codex settings file is backed up first.
@@ -18,7 +18,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 TOOL="$REPO/scripts/codex_settings_tool.py"
-echo "Workflow Copilot for Codex - uninstall"
+echo "ModelMatch for Codex - uninstall"
 echo
 if [ -n "$PROJECT" ]; then
   echo "1/3 Removing Codex hooks ($PROJECT)"
@@ -33,8 +33,8 @@ else
   echo
   echo "2/3 Stopping the background service and the local proxy"
   python3 "$REPO/scripts/agents_service.py" uninstall
-  echo "  $(python3 "$REPO/hooks/workflow_copilot_codex_hook.py" --stop-proxy)"
-  echo "  (if Workflow Copilot for Copilot is installed, its extension starts the proxy again when needed)"
+  echo "  $(python3 "$REPO/hooks/modelmatch_codex_hook.py" --stop-proxy)"
+  echo "  (if ModelMatch for Copilot is installed, its extension starts the proxy again when needed)"
 fi
 echo
 echo "3/3 Local files"
@@ -46,4 +46,4 @@ else
   echo "  kept logs/ and state/ (add --purge to delete Codex's files there)"
 fi
 echo
-echo "Done. Restart any open Codex session so it stops using Workflow Copilot."
+echo "Done. Restart any open Codex session so it stops using ModelMatch."

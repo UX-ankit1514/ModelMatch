@@ -4,7 +4,7 @@
 #   bash scripts/package.sh
 set -eu
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-NAME="workflow-copilot-claude-code"
+NAME="modelmatch-claude-code"
 VERSION="$(python3 -c "import re,sys; print(re.search(r'__version__ = \"(.+?)\"', open(sys.argv[1]).read()).group(1))" "$REPO/proxy/__init__.py")"
 OUT="$REPO/dist/$NAME-$VERSION.zip"
 STAGE="$(mktemp -d)"

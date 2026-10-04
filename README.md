@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🧭 Workflow Copilot for Claude Code, Codex and Copilot
+# 🧭 ModelMatch for Claude Code, Codex and Copilot
 
-**Get the right model for every prompt. Type as usual, Workflow Copilot suggests the best model, and one click switches to it, without ever leaving your terminal.**
+**Get the right model for every prompt. Type as usual, ModelMatch suggests the best model, and one click switches to it, without ever leaving your terminal.**
 
-[![CI](https://github.com/UX-ankit1514/Hooks/actions/workflows/ci.yml/badge.svg)](https://github.com/UX-ankit1514/Hooks/actions/workflows/ci.yml)
+[![CI](https://github.com/UX-ankit1514/ModelMatch/actions/workflows/ci.yml/badge.svg)](https://github.com/UX-ankit1514/ModelMatch/actions/workflows/ci.yml)
 ![Works with](https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20Codex%20%C2%B7%20Copilot%20CLI-d97757)
 ![Hooks](https://img.shields.io/badge/hooks-SessionStart%20%2B%20UserPromptSubmit-8250df)
 ![Running cost](https://img.shields.io/badge/running%20cost-%240-2ea44f)
@@ -27,7 +27,7 @@
   - [Using it with Codex or GitHub Copilot](#using-it-with-codex-or-github-copilot)
 - [Configuration](#configuration)
 - [Commands](#commands)
-- [Connecting the Workflow Copilot router](#connecting-the-workflow-copilot-router)
+- [Connecting the cloud router](#connecting-the-cloud-router)
 - [Sharing it](#sharing-it)
 - [Security and privacy](#security-and-privacy)
 - [Testing](#testing)
@@ -44,27 +44,27 @@ Claude Code answers every prompt with **one model**, whichever you picked last. 
 means remembering `/model`, guessing which model fits, and switching back afterwards, so in
 practice nobody does it.
 
-[Workflow Copilot](https://workflow-copilot-ten.vercel.app/analyzer) already knows how to pick
-the best model for a prompt, but you had to copy the prompt into a website to ask it.
+The [prompt analyzer website](https://workflow-copilot-ten.vercel.app/analyzer) already knows how to pick
+the best model for a prompt, but you had to copy the prompt into it to ask.
 
 Picking the model isn't the hard part. Remembering to do it, every single prompt, is.
 
 ## How it works for people
 
-Workflow Copilot moves that decision into Claude Code itself, and asks you only one question:
+ModelMatch moves that decision into Claude Code itself, and asks you only one question:
 
 | Step | Who | What happens |
 | :-: | --- | --- |
 | 1 | You | Type a prompt in Claude Code, exactly as you do today. |
-| 2 | Workflow Copilot | Reads the prompt *before* Claude does and picks **one** best-fit model. |
+| 2 | ModelMatch | Reads the prompt *before* Claude does and picks **one** best-fit model. |
 | 3 | Your Mac | Shows a small popup: *"Recommended model: Claude Haiku 4.5. Reason: Short, simple request…"* |
 | 4 | You | Click **Use Claude Haiku 4.5** or **Keep current**. Do nothing and it keeps your model after 30 seconds. |
-| 5 | Claude | Answers with the model you chose. A line under your prompt confirms it: *"Workflow Copilot: using Claude Haiku 4.5 for this prompt."* |
+| 5 | Claude | Answers with the model you chose. A line under your prompt confirms it: *"ModelMatch: using Claude Haiku 4.5 for this prompt."* |
 | 6 | Next prompt | Starts fresh with its own suggestion. Accepting once never changes your next prompt. |
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Workflow Copilot                                   │
+│  ModelMatch                                         │
 │                                                     │
 │  Recommended model: Claude Haiku 4.5                │
 │  Reason: Short, simple request: a fast,             │
@@ -87,7 +87,7 @@ Workflow Copilot moves that decision into Claude Code itself, and asks you only 
 | **A Claude Code user** | The popup | Accept or keep a suggestion, pause and resume it |
 | **The person installing it** | Terminal and the scripts in [`scripts/`](scripts) | Install for every session or one folder, check health, update, remove |
 | **A developer** | This repository | Change routing, add provider adapters, run the tests |
-| **The Workflow Copilot website** | The [`/api/route`](#connecting-the-workflow-copilot-router) endpoint | Supply the real recommendations |
+| **The analyzer website** | The [`/api/route`](#connecting-the-cloud-router) endpoint | Supply the real recommendations |
 
 ---
 
@@ -138,7 +138,7 @@ set of settings, and they can be installed side by side.
 
 - **Your Claude sign-in passes straight through** to Anthropic. It's never stored or logged.
 - **Your prompts stay on your Mac** with the built-in recommender. Logs keep only a prompt's length, never its text.
-- **Your settings are safe.** Every change is backed up first, and only Workflow Copilot's own entries are ever touched.
+- **Your settings are safe.** Every change is backed up first, and only ModelMatch's own entries are ever touched.
 
 ### 💸 Costs nothing to run
 
@@ -146,7 +146,7 @@ set of settings, and they can be installed side by side.
 
 ### 🔌 Built to grow
 
-- **Recommendation is separate from execution.** Workflow Copilot can recommend *any* model (GPT, Gemini, …), but only switches when a real adapter can run it. Today that's Claude in Claude Code, and the models in your own Codex list or Copilot plan. A model none of your tools can run is shown as advice and **never faked**.
+- **Recommendation is separate from execution.** ModelMatch can recommend *any* model (GPT, Gemini, …), but only switches when a real adapter can run it. Today that's Claude in Claude Code, and the models in your own Codex list or Copilot plan. A model none of your tools can run is shown as advice and **never faked**.
 
 ---
 
@@ -206,13 +206,13 @@ sequenceDiagram
 
 | Message | What it means |
 | --- | --- |
-| *Workflow Copilot: using Claude Sonnet 5.5 for this prompt.* | You clicked **Use**. |
-| *Workflow Copilot: kept your current model (recommended …)* | You clicked **Keep current**. |
-| *Workflow Copilot: no answer within 30s, kept your current model …* | The popup timed out. Nothing changed. |
-| *Workflow Copilot recommends …, which is already your current model.* | You're already on the best model, so no popup. |
-| *Workflow Copilot recommends GPT-4o … isn't set up yet.* | The best fit isn't a Claude model. Shown as advice, nothing switched. |
+| *ModelMatch: using Claude Sonnet 5.5 for this prompt.* | You clicked **Use**. |
+| *ModelMatch: kept your current model (recommended …)* | You clicked **Keep current**. |
+| *ModelMatch: no answer within 30s, kept your current model …* | The popup timed out. Nothing changed. |
+| *ModelMatch recommends …, which is already your current model.* | You're already on the best model, so no popup. |
+| *ModelMatch recommends GPT-4o … isn't set up yet.* | The best fit isn't a Claude model. Shown as advice, nothing switched. |
 | *… (Recommendation only: model routing is off for this session.)* | Installed with `--no-routing`, or the session started before you installed. |
-| *Workflow Copilot is unavailable right now …* | Something failed behind the scenes. Claude still answers with your model. |
+| *ModelMatch is unavailable right now …* | Something failed behind the scenes. Claude still answers with your model. |
 
 The deep dive (proxy endpoints, safety checks, the router API) is in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
 
@@ -226,7 +226,7 @@ The deep dive (proxy endpoints, safety checks, the router API) is in [docs/HOW-I
 | Copilot extension | JavaScript (Copilot CLI extension API) | Your Mac, inside Copilot CLI |
 | Local proxies | FastAPI, uvicorn, httpx (streaming passthrough) | Your Mac, `127.0.0.1:8787` (Claude Code) and `:8788` (Codex) |
 | Use / Keep popup | macOS `osascript` dialog, terminal `[Y/n]` fallback | macOS |
-| Recommendations | Built-in local recommender, or the Workflow Copilot cloud router | Your Mac / Vercel |
+| Recommendations | Built-in local recommender, or the cloud router (the analyzer website) | Your Mac / Vercel |
 | State | One JSON file, no database | Your Mac |
 | Tests and CI | pytest, GitHub Actions (macOS + Linux) | GitHub |
 
@@ -237,11 +237,11 @@ The deep dive (proxy endpoints, safety checks, the router API) is in [docs/HOW-I
 ```text
 .
 ├── hooks/
-│   ├── workflow_copilot_hook.py          The hook Claude Code runs (SessionStart + UserPromptSubmit)
-│   ├── workflow_copilot_codex_hook.py    The same hooks for Codex CLI
-│   ├── workflow_copilot_copilot_hook.py  The decision script for GitHub Copilot CLI
-│   ├── copilot-extension/                The Copilot extension (asks you, switches the model)
-│   └── agents_common.py                  Code shared by the Codex and Copilot hooks
+│   ├── modelmatch_hook.py         The hook Claude Code runs (SessionStart + UserPromptSubmit)
+│   ├── modelmatch_codex_hook.py   The same hooks for Codex CLI
+│   ├── modelmatch_copilot_hook.py The decision script for GitHub Copilot CLI
+│   ├── copilot-extension/         The Copilot extension (asks you, switches the model)
+│   └── agents_common.py           Code shared by the Codex and Copilot hooks
 ├── proxy/                         The local proxy (Claude Code)
 │   ├── app.py                     Endpoints + passthrough to the Anthropic API
 │   ├── router_client.py           Built-in recommender, /api/route and /api/analyze clients
@@ -279,12 +279,12 @@ The deep dive (proxy endpoints, safety checks, the router API) is in [docs/HOW-I
 ### 1. Install
 
 ```bash
-git clone https://github.com/UX-ankit1514/Hooks.git ~/workflow-copilot
-cd ~/workflow-copilot
+git clone https://github.com/UX-ankit1514/ModelMatch.git ~/modelmatch
+cd ~/modelmatch
 bash scripts/install.sh --global
 ```
 
-This downloads Workflow Copilot to a **workflow-copilot** folder in your home folder and turns it
+This downloads ModelMatch to a **modelmatch** folder in your home folder and turns it
 on for **every** Claude Code session. It takes about a minute and ends with a list of green ticks
 and **Done.**
 
@@ -301,7 +301,7 @@ Quit Claude Code completely, open it again, and type any prompt. The popup appea
 | **Suggestions only**, never switch models | add `--no-routing` to either line |
 
 > [!WARNING]
-> Keep the `workflow-copilot` folder where it is: Claude Code uses it on every prompt. If you move
+> Keep the `modelmatch` folder where it is: Claude Code uses it on every prompt. If you move
 > it, run `bash scripts/install.sh --global` again from the new location.
 
 <details>
@@ -310,8 +310,8 @@ Quit Claude Code completely, open it again, and type any prompt. The popup appea
 <br>
 
 1. On this page, click the green **Code** button → **Download ZIP**, and open the file.
-2. Rename the **Hooks-main** folder to **workflow-copilot** and move it into your home folder (Finder → **Go → Home**).
-3. In Terminal: `cd ~/workflow-copilot && bash scripts/install.sh --global`
+2. Rename the **ModelMatch-main** folder to **modelmatch** and move it into your home folder (Finder → **Go → Home**).
+3. In Terminal: `cd ~/modelmatch && bash scripts/install.sh --global`
 4. Restart Claude Code.
 </details>
 
@@ -330,18 +330,18 @@ Each Mac keeps its own settings and logs, and uses its own Claude sign-in.
 
    - **From GitHub:**
      ```bash
-     git clone https://github.com/UX-ankit1514/Hooks.git ~/workflow-copilot
+     git clone https://github.com/UX-ankit1514/ModelMatch.git ~/modelmatch
      ```
    - **From a file, no GitHub needed:**
      1. On a Mac that already has it, run `bash scripts/package.sh`. This makes a zip in the
         `dist/` folder.
      2. Send the zip by AirDrop, email or Slack.
-     3. On the new Mac, double-click it, rename the folder to **workflow-copilot**, and move it
+     3. On the new Mac, double-click it, rename the folder to **modelmatch**, and move it
         into your home folder (Finder → **Go → Home**).
 
 3. **Install:**
    ```bash
-   cd ~/workflow-copilot
+   cd ~/modelmatch
    bash scripts/install.sh --global
    ```
 
@@ -359,18 +359,18 @@ Each Mac keeps its own settings and logs, and uses its own Claude sign-in.
 > - **An existing gateway stays in charge.** If the new Mac already sends Claude Code through
 >   another gateway (its own `ANTHROPIC_BASE_URL`), the installer won't override it, and you get
 >   suggestions only.
-> - **To remove it from that Mac:** `bash ~/workflow-copilot/scripts/uninstall.sh --global`
+> - **To remove it from that Mac:** `bash ~/modelmatch/scripts/uninstall.sh --global`
 
 ---
 
 ### Using it with Codex or GitHub Copilot
 
-Install Workflow Copilot first (steps above), then, from the same folder:
+Install ModelMatch first (steps above), then, from the same folder:
 
 | I use | Run | Then |
 | --- | --- | --- |
-| **Codex CLI** (0.116 or newer) | `bash scripts/install_codex.sh` | Start `codex`, type **`/hooks`** and trust the two Workflow Copilot hooks. Codex skips new hooks until you do. |
-| **GitHub Copilot CLI** (1.0.44 or newer) | `bash scripts/install_copilot.sh` | Restart `copilot`. You'll see "Workflow Copilot is on…". |
+| **Codex CLI** (0.116 or newer) | `bash scripts/install_codex.sh` | Start `codex`, type **`/hooks`** and trust the two ModelMatch hooks. Codex skips new hooks until you do. |
+| **GitHub Copilot CLI** (1.0.44 or newer) | `bash scripts/install_copilot.sh` | Restart `copilot`. You'll see "ModelMatch is on…". |
 
 Add `--no-routing` (Codex) or `--hooks-only` (Copilot) for suggestions only, with no switching.
 To remove them: `bash scripts/uninstall_codex.sh` or `bash scripts/uninstall_copilot.sh`.
@@ -392,25 +392,25 @@ The full guide is [docs/CODEX-COPILOT-GUIDE.md](docs/CODEX-COPILOT-GUIDE.md).
 
 | Setting | Default | Controls |
 | --- | :-: | --- |
-| `WORKFLOW_COPILOT_API_URL` | *empty* | Where recommendations come from. Empty means the built-in recommender. |
-| `WORKFLOW_COPILOT_API_KEY` | | Key for the cloud router |
-| `WORKFLOW_COPILOT_API_TIMEOUT` | 25 | Seconds to wait for a recommendation |
-| `WORKFLOW_COPILOT_CONFIRM_UI` | `auto` | `auto` (popup), `dialog`, `tty`, `auto-accept`, `never` |
-| `WORKFLOW_COPILOT_CONFIRM_TIMEOUT` | 30 | Seconds before an unanswered popup keeps your model |
-| `WORKFLOW_COPILOT_DISABLED` | 0 | `1` pauses it (use `pause.sh` / `resume.sh`) |
-| `WORKFLOW_COPILOT_MAX_PROMPT_CHARS` | 8000 | How much of a prompt is sent to a cloud router |
-| `WORKFLOW_COPILOT_UPSTREAM_URL` | `https://api.anthropic.com` | Where Claude Code's requests are forwarded |
-| `WORKFLOW_COPILOT_LOG_PROMPTS` | 0 | `1` adds an 80-character prompt preview to logs |
-| `WORKFLOW_COPILOT_PORT` | 8787 | Local proxy port |
+| `MODELMATCH_API_URL` | *empty* | Where recommendations come from. Empty means the built-in recommender. |
+| `MODELMATCH_API_KEY` | | Key for the cloud router |
+| `MODELMATCH_API_TIMEOUT` | 25 | Seconds to wait for a recommendation |
+| `MODELMATCH_CONFIRM_UI` | `auto` | `auto` (popup), `dialog`, `tty`, `auto-accept`, `never` |
+| `MODELMATCH_CONFIRM_TIMEOUT` | 30 | Seconds before an unanswered popup keeps your model |
+| `MODELMATCH_DISABLED` | 0 | `1` pauses it (use `pause.sh` / `resume.sh`) |
+| `MODELMATCH_MAX_PROMPT_CHARS` | 8000 | How much of a prompt is sent to a cloud router |
+| `MODELMATCH_UPSTREAM_URL` | `https://api.anthropic.com` | Where Claude Code's requests are forwarded |
+| `MODELMATCH_LOG_PROMPTS` | 0 | `1` adds an 80-character prompt preview to logs |
+| `MODELMATCH_PORT` | 8787 | Local proxy port |
 
 The hook rereads `.env` on every prompt. After changing router settings, restart the proxy with
-`python3 hooks/workflow_copilot_hook.py --stop-proxy` (it starts again on its own).
+`python3 hooks/modelmatch_hook.py --stop-proxy` (it starts again on its own).
 
 ---
 
 ## Commands
 
-Run these from the `workflow-copilot` folder.
+Run these from the `modelmatch` folder.
 
 | Command | What it does |
 | --- | --- |
@@ -420,7 +420,7 @@ Run these from the `workflow-copilot` folder.
 | `bash scripts/pause.sh` / `resume.sh` | Pause / resume, from the next prompt |
 | `git pull && bash scripts/install.sh --global` | Update to the newest version |
 | `bash scripts/uninstall.sh --global` | Remove it (`--purge` also deletes `.venv`, `logs`, `state`) |
-| `python3 hooks/workflow_copilot_hook.py --status` | Is the local proxy running? (`--start-proxy` / `--stop-proxy`) |
+| `python3 hooks/modelmatch_hook.py --status` | Is the local proxy running? (`--start-proxy` / `--stop-proxy`) |
 | `bash scripts/package.sh` | Build a shareable zip in `dist/` |
 | `.venv/bin/python -m pytest` | Run the tests |
 
@@ -428,10 +428,10 @@ After install, update or uninstall, **restart Claude Code**.
 
 ---
 
-## Connecting the Workflow Copilot router
+## Connecting the cloud router
 
 Recommendations currently come from a **built-in local recommender** (simple rules: short
-questions → Haiku, coding → Sonnet, big design work → Opus). The real Workflow Copilot router
+questions → Haiku, coding → Sonnet, big design work → Opus). The real cloud router
 plugs in with one setting.
 
 | Endpoint on the website | Status |
@@ -443,8 +443,8 @@ Once `/api/route` is live:
 
 ```bash
 # in .env
-WORKFLOW_COPILOT_API_URL=https://workflow-copilot-ten.vercel.app/api/route
-WORKFLOW_COPILOT_API_KEY=<key>
+MODELMATCH_API_URL=https://workflow-copilot-ten.vercel.app/api/route
+MODELMATCH_API_KEY=<key>
 ```
 
 ```http
@@ -452,13 +452,13 @@ POST /api/route   {"prompt": "…", "client": "claude-code"}
 → 200             {"recommended_model": "claude-sonnet-5-5", "reason": "…", "confidence": 0.82}
 ```
 
-The full contract and rehearsal steps are in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md#connecting-the-real-workflow-copilot-router).
+The full contract and rehearsal steps are in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md#connecting-the-real-cloud-router).
 
 ---
 
 ## Sharing it
 
-**Send the link:** `https://github.com/UX-ankit1514/Hooks`. The steps in
+**Send the link:** `https://github.com/UX-ankit1514/ModelMatch`. The steps in
 [Installing on another Mac](#installing-on-another-mac) are all anyone needs. Each person gets their own local proxy,
 settings and logs, and uses their own Claude sign-in. Nothing is shared between machines.
 
@@ -474,7 +474,7 @@ personal path.
 | --- | --- |
 | **Your Claude sign-in** | Passed straight through to Anthropic. Never stored, never logged. |
 | **Your prompts** | With the built-in recommender they never leave your Mac. A cloud router receives at most the first 8,000 characters, once per prompt. Logs record only length and a fingerprint. |
-| **Your settings** | Backed up before every change. Only Workflow Copilot's own entries are touched. Invalid settings files and other gateways' `ANTHROPIC_BASE_URL` are never overwritten. |
+| **Your settings** | Backed up before every change. Only ModelMatch's own entries are touched. Invalid settings files and other gateways' `ANTHROPIC_BASE_URL` are never overwritten. |
 | **Prompts are never blocked** | The hook always lets Claude continue, and its command ends in `\|\| true` so even a deleted hook file can't block a prompt. |
 | **Model switching** | Only to models your tool can really run (Claude in Claude Code, your Codex list, your Copilot plan). A model it can't run is shown as advice, never faked. |
 | **Secrets in Git** | `.env`, logs, state and settings are git-ignored. The zip builder refuses to include them. |
@@ -513,7 +513,7 @@ every push and pull request.
 ## FAQ and troubleshooting
 
 Start with the health check. It names the problem and the exact command that fixes it:
-`bash ~/workflow-copilot/scripts/doctor.sh`
+`bash ~/modelmatch/scripts/doctor.sh`
 
 <details>
 <summary><b>Claude Code shows a connection or "API" error.</b></summary>
@@ -523,11 +523,11 @@ Start with the health check. It names the problem and the exact command that fix
 The local proxy isn't running. Start it:
 
 ```bash
-python3 ~/workflow-copilot/hooks/workflow_copilot_hook.py --start-proxy
+python3 ~/modelmatch/hooks/modelmatch_hook.py --start-proxy
 ```
 
 Still stuck? Turn model switching off. You keep the suggestions, and Claude Code talks to Anthropic
-directly again: `bash ~/workflow-copilot/scripts/install.sh --global --no-routing`, then restart
+directly again: `bash ~/modelmatch/scripts/install.sh --global --no-routing`, then restart
 Claude Code.
 </details>
 
@@ -538,7 +538,7 @@ Claude Code.
 
 Restart Claude Code (sessions opened before installing don't use it). The popup may be behind
 another window, so check Mission Control. Make sure it isn't paused:
-`bash ~/workflow-copilot/scripts/resume.sh`.
+`bash ~/modelmatch/scripts/resume.sh`.
 </details>
 
 <details>
@@ -591,7 +591,7 @@ keeps your current model, so it's safe but not useful yet.
 
 <br>
 
-`~/workflow-copilot/logs/hook.log` and `proxy.log`. They record suggestions, choices and errors.
+`~/modelmatch/logs/hook.log` and `proxy.log`. They record suggestions, choices and errors.
 Never your prompt text, passwords or keys.
 </details>
 
@@ -608,7 +608,7 @@ Never your prompt text, passwords or keys.
 
 **Next**
 
-- [ ] `/api/route` on the Workflow Copilot website, for real recommendations
+- [ ] `/api/route` on the analyzer website, for real recommendations
 - [ ] Quieter suggestions once the real router is live (no popup when your model already fits)
 - [ ] Provider adapters (OpenRouter and others), so Claude Code can run non-Claude recommendations too
 
@@ -619,16 +619,16 @@ Never your prompt text, passwords or keys.
 | Document | Read it when you want to... |
 | --- | --- |
 | [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) | Understand the proxy endpoints, install safety checks, router API and known limits |
-| [docs/CODEX-COPILOT-GUIDE.md](docs/CODEX-COPILOT-GUIDE.md) | Install and use Workflow Copilot with Codex CLI and GitHub Copilot CLI |
+| [docs/CODEX-COPILOT-GUIDE.md](docs/CODEX-COPILOT-GUIDE.md) | Install and use ModelMatch with Codex CLI and GitHub Copilot CLI |
 | [docs/CODEX-COPILOT-PLAN.md](docs/CODEX-COPILOT-PLAN.md) | See how the Codex and Copilot versions were researched and designed |
 | [.env.example](.env.example) | See every setting |
 | [Claude Code hooks](https://code.claude.com/docs/en/hooks) | Learn how Claude Code hooks work |
 | [Codex hooks](https://developers.openai.com/codex/hooks) | Learn how Codex hooks work |
 | [Copilot CLI hooks](https://docs.github.com/en/copilot/reference/hooks-reference) | Learn how Copilot CLI hooks work |
-| [Workflow Copilot](https://workflow-copilot-ten.vercel.app/analyzer) | Try the prompt analyzer on the web |
+| [Prompt analyzer](https://workflow-copilot-ten.vercel.app/analyzer) | Try the prompt analyzer on the web |
 
 ---
 
 <div align="center">
-<sub>Built for Workflow Copilot · Runs locally on your Mac · Your own accounts stay yours</sub>
+<sub>ModelMatch · Runs locally on your Mac · Your own accounts stay yours</sub>
 </div>

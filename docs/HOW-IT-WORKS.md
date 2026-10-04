@@ -1,4 +1,4 @@
-# How Workflow Copilot for Claude Code works
+# How ModelMatch for Claude Code works
 
 The technical deep dive. For installing, everyday use, settings and commands, see the [README](../README.md).
 
@@ -8,7 +8,7 @@ The technical deep dive. For installing, everyday use, settings and commands, se
 You type a prompt in Claude Code
         │
         ▼
-UserPromptSubmit hook ──► local proxy (127.0.0.1:8787) ──► Workflow Copilot router (mock or cloud)
+UserPromptSubmit hook ──► local proxy (127.0.0.1:8787) ──► ModelMatch router (mock or cloud)
         │                        ◄── ONE model + short reason
         ▼
 macOS popup:  "Recommended model: Claude Haiku 4.5 … Use this model for this prompt?"
@@ -51,7 +51,7 @@ proxy swaps the model for this turn        nothing changes
 | `POST /recommend` | one recommendation for a prompt (UserPromptSubmit) |
 | `POST /selection` | record accept / reject |
 | `POST /mock/api/route` | local mock of the planned cloud contract |
-| everything else | transparent passthrough to `WORKFLOW_COPILOT_UPSTREAM_URL` |
+| everything else | transparent passthrough to `MODELMATCH_UPSTREAM_URL` |
 
 ## Install scopes
 
@@ -62,20 +62,20 @@ proxy swaps the model for this turn        nothing changes
 | `install.sh --project DIR` | `DIR/.claude/settings.json` | `DIR/.claude/settings.local.json` |
 
 `scripts/settings_tool.py` does the merging:
-- only entries whose command contains `workflow_copilot_hook.py` are added/removed;
+- only entries whose command contains `modelmatch_hook.py` are added/removed;
 - every changed file is backed up first (`*.bak-<timestamp>`); invalid JSON is never overwritten;
 - the hook command ends in `|| true` (a missing script makes Python exit 2, which would *block*
   prompts);
 - if `ANTHROPIC_BASE_URL` is already set to something else (settings, or `~/.zshrc` and friends
-  for `--global`), routing is not enabled. Chain instead with `WORKFLOW_COPILOT_UPSTREAM_URL`;
+  for `--global`), routing is not enabled. Chain instead with `MODELMATCH_UPSTREAM_URL`;
 - uninstall removes `ANTHROPIC_BASE_URL` only if it still points at this proxy.
 
 Other safeguards in the hook: a run-once guard (global + project installs still ask once per
 prompt), scripted runs (`CLAUDE_CODE_ENTRYPOINT=sdk-*`, e.g. `claude -p`) are skipped unless
-`WORKFLOW_COPILOT_CONFIRM_UI=auto-accept`, and while paused it still keeps the proxy alive when
+`MODELMATCH_CONFIRM_UI=auto-accept`, and while paused it still keeps the proxy alive when
 routing is on.
 
-## Connecting the real Workflow Copilot router
+## Connecting the real cloud router
 
 Status of the live site (checked 2026-10-02):
 
@@ -84,7 +84,7 @@ Status of the live site (checked 2026-10-02):
 | `POST /api/route` | does not exist yet (404); needs to be added to the website |
 | `POST /api/analyze` | exists; returns a long free-text analysis from an LLM |
 
-**Stopgap:** `WORKFLOW_COPILOT_API_URL=https://workflow-copilot-ten.vercel.app/api/analyze`. The
+**Stopgap:** `MODELMATCH_API_URL=https://workflow-copilot-ten.vercel.app/api/analyze`. The
 proxy reads the "SECTION 1: RECOMMENDED MODEL" line and drops the tier (low/max…). It works
 (≈4 s per prompt) but knows an old model list (most picks are Gemini/GPT, which are shown, never
 applied), costs one LLM call per prompt, and the endpoint has no auth.
@@ -94,7 +94,7 @@ applied), costs one LLM call per prompt, and the endpoint has no auth.
 ```http
 POST /api/route
 Content-Type: application/json
-Authorization: Bearer <WORKFLOW_COPILOT_API_KEY>
+Authorization: Bearer <MODELMATCH_API_KEY>
 
 { "prompt": "…", "client": "claude-code" }
 ```
@@ -107,7 +107,7 @@ Authorization: Bearer <WORKFLOW_COPILOT_API_KEY>
   names like "Claude Sonnet 5.5" also work.
 - One-sentence `reason`; no tiers or modes. Respond in under ~3 s; require an API key.
 
-Rehearse locally with `WORKFLOW_COPILOT_API_URL=http://127.0.0.1:8787/mock/api/route`.
+Rehearse locally with `MODELMATCH_API_URL=http://127.0.0.1:8787/mock/api/route`.
 
 ## Known limits
 

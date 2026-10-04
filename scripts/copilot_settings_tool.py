@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Install / remove Workflow Copilot in GitHub Copilot CLI's user settings.
+"""Install / remove ModelMatch in GitHub Copilot CLI's user settings.
 
   copilot_settings_tool.py install [--hooks-only]
   copilot_settings_tool.py uninstall
   copilot_settings_tool.py status
 
 What it changes (all under $COPILOT_HOME, default ~/.copilot)
-  extensions/workflow-copilot/   the extension (copied from hooks/copilot-extension/) plus a
-                                 workflow-copilot.json that tells it where this folder is.
+  extensions/modelmatch/   the extension (copied from hooks/copilot-extension/) plus a
+                                 modelmatch.json that tells it where this folder is.
   settings.json                  "experimental": true, which Copilot needs to load extensions.
                                  Added only if missing; uninstall removes it only if this tool
                                  added it (remembered in state/copilot-install.json).
-  hooks/workflow-copilot.json    --hooks-only: plain command hooks instead of the extension
+  hooks/modelmatch.json    --hooks-only: plain command hooks instead of the extension
                                  (recommendations as notifications, no switching, no
                                  experimental mode needed).
 
 Safety
-  * Only Workflow Copilot's own extension folder and hooks file are created or removed.
+  * Only ModelMatch's own extension folder and hooks file are created or removed.
   * settings.json is backed up before it is changed, and never rewritten if it isn't plain
     JSON (comments would be lost); you are told to run /experimental on instead.
 """
@@ -31,10 +31,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 EXTENSION_SOURCE = REPO / "hooks" / "copilot-extension" / "extension.mjs"
-EXTENSION_NAME = "workflow-copilot"
-MARKER_FILE = "workflow-copilot.json"
-HOOK_SCRIPT = REPO / "hooks" / "workflow_copilot_copilot_hook.py"
-HOOKS_FILE_NAME = "workflow-copilot.json"
+EXTENSION_NAME = "modelmatch"
+MARKER_FILE = "modelmatch.json"
+HOOK_SCRIPT = REPO / "hooks" / "modelmatch_copilot_hook.py"
+HOOKS_FILE_NAME = "modelmatch.json"
 
 
 def copilot_home():
@@ -42,7 +42,7 @@ def copilot_home():
 
 
 def state_file():
-    return Path(os.environ.get("WORKFLOW_COPILOT_STATE_DIR") or (REPO / "state")) / "copilot-install.json"
+    return Path(os.environ.get("MODELMATCH_STATE_DIR") or (REPO / "state")) / "copilot-install.json"
 
 
 def extension_dir():
@@ -157,7 +157,7 @@ def remove_hooks_file():
 def install_extension():
     folder = extension_dir()
     if folder.exists() and not (folder / MARKER_FILE).exists():
-        raise ValueError("{} exists and isn't Workflow Copilot's; not touching it".format(folder))
+        raise ValueError("{} exists and isn't ModelMatch's; not touching it".format(folder))
     folder.mkdir(parents=True, exist_ok=True)
     shutil.copy2(str(EXTENSION_SOURCE), str(folder / "extension.mjs"))
     write_json(folder / MARKER_FILE, {"repo": str(REPO), "python": python_path(),
@@ -183,7 +183,7 @@ def uninstall():
     removed = remove_extension()
     removed = remove_hooks_file() or removed
     if not removed:
-        print("  Workflow Copilot was not installed in {}".format(copilot_home()))
+        print("  ModelMatch was not installed in {}".format(copilot_home()))
     state = read_state()
     if state.get("enabled_experimental"):
         try:
@@ -191,7 +191,7 @@ def uninstall():
             if settings.get("experimental") is True:
                 del settings["experimental"]
                 write_json(settings_path(), settings)
-                print("  experimental mode off again (Workflow Copilot had turned it on)")
+                print("  experimental mode off again (ModelMatch had turned it on)")
         except ValueError as exc:
             print("  NOTE: left {} as it is ({})".format(settings_path(), exc))
         state.pop("enabled_experimental", None)

@@ -1,4 +1,4 @@
-"""Workflow Copilot local proxy.
+"""ModelMatch local proxy.
 
 Run:  .venv/bin/python -m uvicorn proxy.app:create_app --factory --host 127.0.0.1 --port 8787
 
@@ -39,7 +39,7 @@ from .provider import adapter_for, is_small_fast_model, resolve_model, same_mode
 from .router_client import MockRouter, RouterError, build_router
 from .session_store import SessionStore
 
-LOGGER_NAME = "workflow_copilot.proxy"
+LOGGER_NAME = "modelmatch.proxy"
 HOP_BY_HOP = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers",
     "transfer-encoding", "upgrade", "host", "content-length",
@@ -201,18 +201,18 @@ def create_app(settings: Optional[Settings] = None,
             await app.state.upstream.aclose()
             log.info("proxy stopped | pid=%s", os.getpid())
 
-    app = FastAPI(title="Workflow Copilot proxy", version=__version__, lifespan=lifespan,
+    app = FastAPI(title="ModelMatch proxy", version=__version__, lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store = store
     app.state.settings = settings
 
-    # -- Workflow Copilot endpoints ---------------------------------------------
+    # -- ModelMatch endpoints ---------------------------------------------
 
     @app.get("/health")
     async def health():
         return {
             "status": "ok",
-            "service": "workflow-copilot-proxy",
+            "service": "modelmatch-proxy",
             "version": __version__,
             "router": settings.router_mode,
             "upstream": settings.upstream_url,
@@ -364,14 +364,14 @@ def create_app(settings: Optional[Settings] = None,
                 response = await send_upstream(request, url, headers, body)
         except httpx.HTTPError as exc:
             log.error("upstream error | %s %s | %s", request.method, "/" + path, type(exc).__name__)
-            return anthropic_error(502, "Workflow Copilot proxy could not reach the upstream API ({}).".format(
+            return anthropic_error(502, "ModelMatch proxy could not reach the upstream API ({}).".format(
                 type(exc).__name__))
 
         if is_messages and response.status_code >= 400:
             log.warning("upstream HTTP %s | %s /%s", response.status_code, request.method, path)
         response_headers = {k: v for k, v in response.headers.items() if k.lower() not in HOP_BY_HOP}
         if routed:
-            response_headers["x-workflow-copilot-routed-model"] = routed[2]
+            response_headers["x-modelmatch-routed-model"] = routed[2]
         return StreamingResponse(response.aiter_raw(), status_code=response.status_code, headers=response_headers,
                                  background=BackgroundTask(response.aclose))
 

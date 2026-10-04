@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Workflow Copilot for GitHub Copilot CLI: the decision-maker behind the extension.
+"""ModelMatch for GitHub Copilot CLI: the decision-maker behind the extension.
 
 Copilot runs this in one of two ways:
 
-  --extension    from the Workflow Copilot extension (~/.copilot/extensions/workflow-copilot),
+  --extension    from the ModelMatch extension (~/.copilot/extensions/modelmatch),
                  which sends one JSON object on stdin:
                    {"event": "session_start", "session_id", "cwd", "source", "model", "interactive", "can_switch"}
                    {"event": "prompt", "session_id", "cwd", "prompt", "current_model",
@@ -14,7 +14,7 @@ Copilot runs this in one of two ways:
                  The extension then switches Copilot's model for that prompt (Copilot's own
                  model switch) and back afterwards.
 
-  --event NAME   as a plain Copilot command hook (~/.copilot/hooks/workflow-copilot.json, the
+  --event NAME   as a plain Copilot command hook (~/.copilot/hooks/modelmatch.json, the
                  --hooks-only install; NAME is sessionStart or userPromptSubmitted). Command
                  hooks can't switch models or print under the prompt, so the recommendation is
                  shown as a macOS notification instead.
@@ -65,15 +65,15 @@ def session_start(cfg, log, data):
              common.short(session_id), source, data.get("model") or "-", data.get("interactive"))
     if not common.ensure_proxy(cfg, log, wait_seconds=8):
         log.warning("fallback triggered | proxy unavailable at session start")
-        return {"message": "Workflow Copilot: the local proxy couldn't start, so there will be no model "
+        return {"message": "ModelMatch: the local proxy couldn't start, so there will be no model "
                            "recommendations. Run: bash \"{}/scripts/doctor_copilot.sh\"".format(common.ROOT)}
     common.register_session(cfg, log, CLIENT, session_id, data.get("cwd"), source, data.get("model"))
     if source == "resume" or not data.get("interactive", True):
         return {}
     if not data.get("can_switch", True):
-        return {"message": "Workflow Copilot is on (recommendations only: update Copilot CLI to 1.0.44 or newer "
+        return {"message": "ModelMatch is on (recommendations only: update Copilot CLI to 1.0.44 or newer "
                            "to switch models)."}
-    return {"message": "Workflow Copilot is on (it suggests a model for each prompt; nothing changes unless you "
+    return {"message": "ModelMatch is on (it suggests a model for each prompt; nothing changes unless you "
                        "click Use)."}
 
 
@@ -99,20 +99,20 @@ def decide(cfg, log, data):
         return keep()
     if not common.ensure_proxy(cfg, log, wait_seconds=5):
         log.warning("fallback triggered | proxy unavailable | keeping current model")
-        return keep("Workflow Copilot is unavailable right now (local proxy not running). Continuing with your "
+        return keep("ModelMatch is unavailable right now (local proxy not running). Continuing with your "
                     "current model.")
 
     rec, error = common.get_recommendation(cfg, log, {
         "client": CLIENT, "session_id": session_id, "prompt": prompt, "cwd": data.get("cwd"),
         "current_model": current, "available_models": data.get("available_models") or []})
     if rec is None:
-        return keep("Workflow Copilot couldn't get a recommendation ({}). Continuing with your current model.".format(
+        return keep("ModelMatch couldn't get a recommendation ({}). Continuing with your current model.".format(
             error))
 
     name = rec["recommended_model"]
     reason = rec.get("recommendation_reason") or ""
     reason_text = " " + reason if reason else ""
-    substituted = (" (Workflow Copilot named {}; this is the closest model in your Copilot plan.)".format(
+    substituted = (" (ModelMatch named {}; this is the closest model in your Copilot plan.)".format(
         rec["substituted_from"]) if rec.get("substituted_from") else "")
 
     def save(accepted, decided_by):
@@ -121,14 +121,14 @@ def decide(cfg, log, data):
     if not rec.get("routable"):
         save(False, "unsupported")
         log.info("not applied | %s is not available: %s", name, rec.get("routing_note"))
-        return keep("Workflow Copilot recommends {}.{} {} Keeping your current model.".format(
+        return keep("ModelMatch recommends {}.{} {} Keeping your current model.".format(
             name, reason_text, rec.get("routing_note") or "Copilot can't switch to it."))
     if rec.get("same_as_current"):
         save(False, "already-current")
-        return keep("Workflow Copilot recommends {}, which is already your current model.".format(name))
+        return keep("ModelMatch recommends {}, which is already your current model.".format(name))
     if not data.get("can_switch", True):
         save(False, "copilot-too-old")
-        return keep("Workflow Copilot recommends {}.{}{} (Recommendation only: update Copilot CLI to 1.0.44 or "
+        return keep("ModelMatch recommends {}.{}{} (Recommendation only: update Copilot CLI to 1.0.44 or "
                     "newer to switch models.)".format(name, reason_text, substituted))
 
     decision, method, detail = common.confirm(cfg, rec)
@@ -139,17 +139,17 @@ def decide(cfg, log, data):
 
     if accepted and result.get("applied"):
         return {"action": SWITCH, "model_id": rec["model_id"], "model_name": name,
-                "message": "Workflow Copilot: running this prompt on {}.{}{}".format(name, reason_text, substituted)}
+                "message": "ModelMatch: running this prompt on {}.{}{}".format(name, reason_text, substituted)}
     if accepted:
         log.warning("fallback triggered | accepted but the proxy did not record the route | keeping current model")
-        return keep("Workflow Copilot couldn't apply {}. Keeping your current model.".format(name))
+        return keep("ModelMatch couldn't apply {}. Keeping your current model.".format(name))
     if decision == "rejected":
-        return keep("Workflow Copilot: kept your current model (recommended {}).".format(name))
+        return keep("ModelMatch: kept your current model (recommended {}).".format(name))
     if decision == "timeout":
-        return keep("Workflow Copilot: no answer within {:.0f}s, kept your current model (recommended {}).".format(
+        return keep("ModelMatch: no answer within {:.0f}s, kept your current model (recommended {}).".format(
             cfg.confirm_timeout, name))
     log.warning("fallback triggered | confirmation UI unavailable: %s | keeping current model", detail)
-    return keep("Workflow Copilot recommends {}.{} The Use/Keep question couldn't be shown, so your current model "
+    return keep("ModelMatch recommends {}.{} The Use/Keep question couldn't be shown, so your current model "
                 "was kept.".format(name, reason_text))
 
 
@@ -166,7 +166,7 @@ def run_extension(cfg, log):
                         data.get("detail") or "unknown reason")
         return {}
     if cfg.disabled:
-        log.info("paused via WORKFLOW_COPILOT_DISABLED | %s ignored", event)
+        log.info("paused via MODELMATCH_DISABLED | %s ignored", event)
         return keep() if event == "prompt" else {}
     if event == "session_start":
         return session_start(cfg, log, data)
@@ -215,7 +215,7 @@ def run_command_hook(cfg, log, event):
     common.save_selection(cfg, log, CLIENT, session_id, rec, False, "hooks-only")
     name = rec.get("recommended_raw") or rec["recommended_model"]
     if cfg.notify:
-        common.notify("Workflow Copilot", "Recommended: " + name,
+        common.notify("ModelMatch", "Recommended: " + name,
                       (rec.get("recommendation_reason") or "") + " Switch with /model if you agree.")
     log.info("recommendation shown as a notification | %s", name)
     return None
@@ -230,7 +230,7 @@ def main(argv):
 
     if len(argv) == 2 and argv[1] == "--extension":
         answer = common.run_with_deadline(log, lambda: run_extension(cfg, log), keep(
-            "Workflow Copilot took too long, so your current model was kept."))
+            "ModelMatch took too long, so your current model was kept."))
         try:
             sys.stdout.write(json.dumps(answer if isinstance(answer, dict) else keep()))
             sys.stdout.flush()
@@ -240,7 +240,7 @@ def main(argv):
     if len(argv) == 3 and argv[1] == "--event":
         common.run_with_deadline(log, lambda: run_command_hook(cfg, log, argv[2]), None)
         return 0
-    print("usage: workflow_copilot_copilot_hook.py --extension | --event NAME | --start-proxy | --stop-proxy | --status")
+    print("usage: modelmatch_copilot_hook.py --extension | --event NAME | --start-proxy | --stop-proxy | --status")
     return 2
 
 

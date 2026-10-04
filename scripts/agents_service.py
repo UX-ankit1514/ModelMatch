@@ -10,14 +10,14 @@ restarts it if it stops. It runs only the proxy, as you.
 
 Why it runs from its own copy: macOS refuses to let background services read files in
 Desktop, Documents and Downloads ("Operation not permitted"), and this folder is often
-there. So the service gets, in ~/Library/Application Support/WorkflowCopilot/agents:
+there. So the service gets, in ~/Library/Application Support/ModelMatch/agents:
   venv/    its own Python packages        app/proxy/   a copy of the proxy code
   app/.env a copy of your settings        logs/ state/ its logs and session state
 `install` and `restart` refresh that copy from this folder, so after changing .env or
-updating Workflow Copilot, run `restart` (or the installer again).
+updating ModelMatch, run `restart` (or the installer again).
 
-Set WORKFLOW_COPILOT_NO_LAUNCHD=1 to write the files without asking launchd (tests).
-Set WORKFLOW_COPILOT_RUNTIME_DIR to put the copy somewhere else (tests).
+Set MODELMATCH_NO_LAUNCHD=1 to write the files without asking launchd (tests).
+Set MODELMATCH_RUNTIME_DIR to put the copy somewhere else (tests).
 """
 
 import hashlib
@@ -35,15 +35,15 @@ sys.path.insert(0, str(REPO / "hooks"))
 
 import agents_common as common  # noqa: E402
 
-MARKER = ".workflow-copilot-runtime"
+MARKER = ".modelmatch-runtime"
 IMPORT_CHECK = "import fastapi, uvicorn, httpx, zstandard"
 
 
 def runtime_dir():
-    custom = os.environ.get("WORKFLOW_COPILOT_RUNTIME_DIR")
+    custom = os.environ.get("MODELMATCH_RUNTIME_DIR")
     if custom:
         return Path(custom).expanduser()
-    return Path.home() / "Library" / "Application Support" / "WorkflowCopilot" / "agents"
+    return Path.home() / "Library" / "Application Support" / "ModelMatch" / "agents"
 
 
 def runtime_python(runtime):
@@ -83,7 +83,7 @@ def sync_app(runtime):
         return False
     app = runtime / "app"
     app.mkdir(parents=True, exist_ok=True)
-    (runtime / MARKER).write_text("Workflow Copilot background service files (safe to delete)\n")
+    (runtime / MARKER).write_text("ModelMatch background service files (safe to delete)\n")
     shutil.rmtree(str(app / "proxy"), ignore_errors=True)
     shutil.copytree(str(REPO / "proxy"), str(app / "proxy"), ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     if (REPO / ".env").exists():
@@ -123,8 +123,8 @@ def plist_contents(cfg, runtime):
                              "--host", cfg.host, "--port", str(cfg.port), "--log-level", "warning", "--ws", "none"],
         "WorkingDirectory": str(runtime / "app"),
         "EnvironmentVariables": {
-            "WORKFLOW_COPILOT_LOG_DIR": str(logs),
-            "WORKFLOW_COPILOT_AGENTS_STATE_FILE": str(runtime / "state" / "agents-sessions.json"),
+            "MODELMATCH_LOG_DIR": str(logs),
+            "MODELMATCH_AGENTS_STATE_FILE": str(runtime / "state" / "agents-sessions.json"),
         },
         "RunAtLoad": True,
         "KeepAlive": True,

@@ -1,4 +1,4 @@
-"""End-to-end tests of hooks/workflow_copilot_codex_hook.py against a real agents proxy process.
+"""End-to-end tests of hooks/modelmatch_codex_hook.py against a real agents proxy process.
 
 Every scenario checks the fail-open contract: exit code 0, and stdout is either
 empty or a single JSON object with a "systemMessage".
@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-HOOK = ROOT / "hooks" / "workflow_copilot_codex_hook.py"
+HOOK = ROOT / "hooks" / "modelmatch_codex_hook.py"
 VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
 SESSION = "01a10257-4d46-7ad2-9100-cbf0ebd364be"
 CATALOG = {"models": [
@@ -46,19 +46,19 @@ def make_codex_home(tmp_path, port=None):
 
 
 def base_env(tmp_path, port, **extra):
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("WORKFLOW_COPILOT_", "CODEX", "CLAUDE"))}
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("MODELMATCH_", "CODEX", "CLAUDE"))}
     env.update({
-        "WORKFLOW_COPILOT_AGENTS_PORT": str(port),
-        "WORKFLOW_COPILOT_LOG_DIR": str(tmp_path / "logs"),
-        "WORKFLOW_COPILOT_STATE_DIR": str(tmp_path / "state"),
-        "WORKFLOW_COPILOT_AGENTS_STATE_FILE": str(tmp_path / "state" / "agents.json"),
-        "WORKFLOW_COPILOT_CODEX_HOME": str(tmp_path / "codex"),
-        "WORKFLOW_COPILOT_API_URL": "",
-        "WORKFLOW_COPILOT_CONFIRM_UI": "never",
-        "WORKFLOW_COPILOT_CONFIRM_TIMEOUT": "3",
-        "WORKFLOW_COPILOT_DISABLED": "0",
-        "WORKFLOW_COPILOT_LOG_PROMPTS": "0",
-        "WORKFLOW_COPILOT_NO_LAUNCHD": "1",
+        "MODELMATCH_AGENTS_PORT": str(port),
+        "MODELMATCH_LOG_DIR": str(tmp_path / "logs"),
+        "MODELMATCH_STATE_DIR": str(tmp_path / "state"),
+        "MODELMATCH_AGENTS_STATE_FILE": str(tmp_path / "state" / "agents.json"),
+        "MODELMATCH_CODEX_HOME": str(tmp_path / "codex"),
+        "MODELMATCH_API_URL": "",
+        "MODELMATCH_CONFIRM_UI": "never",
+        "MODELMATCH_CONFIRM_TIMEOUT": "3",
+        "MODELMATCH_DISABLED": "0",
+        "MODELMATCH_LOG_PROMPTS": "0",
+        "MODELMATCH_NO_LAUNCHD": "1",
     })
     env.update({k: str(v) for k, v in extra.items()})
     return env
@@ -130,19 +130,19 @@ def routing_env(proxy, **extra):
 def test_session_start_registers_session(proxy):
     result = run_hook({"session_id": SESSION, "hook_event_name": "SessionStart", "source": "startup",
                        "model": "gpt-5.6-sol", "cwd": str(ROOT)}, base_env(proxy["tmp"], proxy["port"]))
-    assert result.message == "Workflow Copilot is on (recommendations only, routing off)."
+    assert result.message == "ModelMatch is on (recommendations only, routing off)."
     assert session_state(proxy)["start_model"] == "gpt-5.6-sol"
 
 
 def test_session_start_reports_routing(proxy):
     result = run_hook({"session_id": SESSION, "hook_event_name": "SessionStart", "source": "startup"},
                       routing_env(proxy))
-    assert result.message == "Workflow Copilot is on (model routing active)."
+    assert result.message == "ModelMatch is on (model routing active)."
 
 
 def test_session_start_fails_open_when_proxy_cannot_start(tmp_path):
     make_codex_home(tmp_path)
-    env = base_env(tmp_path, free_port(), WORKFLOW_COPILOT_PYTHON=str(tmp_path / "missing-python"))
+    env = base_env(tmp_path, free_port(), MODELMATCH_PYTHON=str(tmp_path / "missing-python"))
     result = run_hook({"session_id": SESSION, "hook_event_name": "SessionStart", "source": "startup"}, env)
     assert "couldn't start" in result.message
 
@@ -161,7 +161,7 @@ def test_recommendation_only_when_routing_is_off(proxy):
 
 def test_accept_applies_route_for_that_turn(proxy):
     event = prompt_event(turn_id="turn-accept")
-    result = run_hook(event, routing_env(proxy, WORKFLOW_COPILOT_CONFIRM_UI="auto-accept"))
+    result = run_hook(event, routing_env(proxy, MODELMATCH_CONFIRM_UI="auto-accept"))
     assert "using GPT-5.6-Luna for this prompt" in result.message
     state = session_state(proxy)
     assert state["active_route"] == "gpt-5.6-luna"
@@ -169,20 +169,20 @@ def test_accept_applies_route_for_that_turn(proxy):
 
 
 def test_reject_keeps_current_model(proxy):
-    run_hook(prompt_event(), routing_env(proxy, WORKFLOW_COPILOT_CONFIRM_UI="auto-accept"))
-    result = run_hook(prompt_event(), routing_env(proxy, WORKFLOW_COPILOT_CONFIRM_UI="never"))
+    run_hook(prompt_event(), routing_env(proxy, MODELMATCH_CONFIRM_UI="auto-accept"))
+    result = run_hook(prompt_event(), routing_env(proxy, MODELMATCH_CONFIRM_UI="never"))
     assert "kept your current model (recommended GPT-5.6-Luna)" in result.message
     assert session_state(proxy)["active_route"] is None
 
 
 def test_already_current_model_needs_no_question(proxy):
-    result = run_hook(prompt_event(model="gpt-5.6-luna"), routing_env(proxy, WORKFLOW_COPILOT_CONFIRM_UI="auto"))
-    assert result.message == "Workflow Copilot recommends GPT-5.6-Luna, which is already your current model."
+    result = run_hook(prompt_event(model="gpt-5.6-luna"), routing_env(proxy, MODELMATCH_CONFIRM_UI="auto"))
+    assert result.message == "ModelMatch recommends GPT-5.6-Luna, which is already your current model."
 
 
 def test_unknown_model_is_shown_but_not_applied(proxy):
     result = run_hook(prompt_event("wc-test: Claude Opus 4.8"),
-                      routing_env(proxy, WORKFLOW_COPILOT_CONFIRM_UI="auto-accept"))
+                      routing_env(proxy, MODELMATCH_CONFIRM_UI="auto-accept"))
     assert "recommends Claude Opus 4.8" in result.message
     assert "isn't in your Codex model list" in result.message
     assert session_state(proxy)["active_route"] is None
@@ -190,13 +190,13 @@ def test_unknown_model_is_shown_but_not_applied(proxy):
 
 def test_slash_commands_and_disabled_flags_are_ignored(proxy):
     assert run_hook(prompt_event("/model"), base_env(proxy["tmp"], proxy["port"])).message is None
-    for flag in ("WORKFLOW_COPILOT_DISABLED", "WORKFLOW_COPILOT_CODEX_DISABLED"):
+    for flag in ("MODELMATCH_DISABLED", "MODELMATCH_CODEX_DISABLED"):
         env = base_env(proxy["tmp"], proxy["port"], **{flag: "1"})
         assert run_hook(prompt_event(), env).message is None
 
 
 def test_no_terminal_falls_back_to_current_model(proxy):
-    result = run_hook(prompt_event(), routing_env(proxy, WORKFLOW_COPILOT_CONFIRM_UI="tty"), start_new_session=True)
+    result = run_hook(prompt_event(), routing_env(proxy, MODELMATCH_CONFIRM_UI="tty"), start_new_session=True)
     assert "couldn't be shown" in result.message
     assert session_state(proxy)["active_route"] is None
 
@@ -226,7 +226,7 @@ esac
     ("timeout", "no answer within", None),
 ])
 def test_popup_confirmation(proxy, fake_osascript, answer, expected_message, expected_route):
-    env = routing_env(proxy, WORKFLOW_COPILOT_CONFIRM_UI="auto", FAKE_POPUP=answer)
+    env = routing_env(proxy, MODELMATCH_CONFIRM_UI="auto", FAKE_POPUP=answer)
     env["PATH"] = str(fake_osascript) + os.pathsep + env.get("PATH", "")
     result = run_hook(prompt_event(), env, start_new_session=True)
     assert expected_message in result.message
@@ -244,7 +244,7 @@ def test_malformed_input_never_breaks_codex(proxy, payload):
 
 def test_proxy_down_fails_open_quickly(tmp_path):
     make_codex_home(tmp_path)
-    env = base_env(tmp_path, free_port(), WORKFLOW_COPILOT_PYTHON=str(tmp_path / "missing-python"))
+    env = base_env(tmp_path, free_port(), MODELMATCH_PYTHON=str(tmp_path / "missing-python"))
     result = run_hook(prompt_event(), env)
     assert "unavailable right now" in result.message
     assert result.elapsed < 5
@@ -259,7 +259,7 @@ def test_missing_hook_file_cannot_block_codex(tmp_path):
 
 def test_duplicate_hook_invocations_act_only_once(proxy):
     """User-level and project-level hooks.json both run for the same prompt (concurrently, in Codex)."""
-    env = routing_env(proxy, WORKFLOW_COPILOT_CONFIRM_UI="auto-accept")
+    env = routing_env(proxy, MODELMATCH_CONFIRM_UI="auto-accept")
     event = prompt_event(turn_id="same-turn")
     first = run_hook(event, env)
     second = run_hook(event, env)
@@ -270,7 +270,7 @@ def test_duplicate_hook_invocations_act_only_once(proxy):
 
 def test_codex_exec_runs_are_skipped_unless_auto_accept(proxy):
     sys.path.insert(0, str(ROOT / "hooks"))
-    import workflow_copilot_codex_hook as hook
+    import modelmatch_codex_hook as hook
     assert hook.codex_subcommand("/opt/tools/bin/codex exec --skip-git-repo-check say hi") == "exec"
     assert hook.codex_subcommand("codex -m gpt-5.5 -c a=b e hi") == "e"
     assert hook.codex_subcommand("codex please exec this") == "please"
@@ -282,7 +282,7 @@ def test_codex_exec_runs_are_skipped_unless_auto_accept(proxy):
     fake.parent.mkdir(exist_ok=True)
     fake.write_text('#!/bin/bash\n"{}" "{}"\n'.format(sys.executable, HOOK))
     fake.chmod(0o755)
-    env = routing_env(proxy, WORKFLOW_COPILOT_CONFIRM_UI="auto")
+    env = routing_env(proxy, MODELMATCH_CONFIRM_UI="auto")
     result = subprocess.run([str(fake), "exec", "do it"], input=json.dumps(prompt_event()), capture_output=True,
                             text=True, env=env, timeout=30)
     assert result.returncode == 0 and result.stdout == ""
@@ -292,11 +292,11 @@ def test_codex_exec_runs_are_skipped_unless_auto_accept(proxy):
 def test_paused_hook_still_keeps_the_proxy_alive_when_routing(tmp_path):
     port = free_port()
     make_codex_home(tmp_path, port)
-    env = base_env(tmp_path, port, WORKFLOW_COPILOT_DISABLED="1")
+    env = base_env(tmp_path, port, MODELMATCH_DISABLED="1")
     try:
         result = run_hook({"session_id": SESSION, "hook_event_name": "SessionStart", "source": "startup"}, env)
         assert result.message is None
-        assert get_json("http://127.0.0.1:{}/health".format(port))["service"] == "workflow-copilot-agents-proxy"
+        assert get_json("http://127.0.0.1:{}/health".format(port))["service"] == "modelmatch-agents-proxy"
     finally:
         subprocess.run([sys.executable, str(HOOK), "--stop-proxy"], env=env, capture_output=True, timeout=20)
 
@@ -311,7 +311,7 @@ def test_command_line_helpers(tmp_path):
                                  timeout=30)
         assert started.returncode == 0 and "running" in started.stdout
         status = subprocess.run([sys.executable, str(HOOK), "--status"], env=env, capture_output=True, text=True)
-        assert json.loads(status.stdout)["service"] == "workflow-copilot-agents-proxy"
+        assert json.loads(status.stdout)["service"] == "modelmatch-agents-proxy"
     finally:
         stopped = subprocess.run([sys.executable, str(HOOK), "--stop-proxy"], env=env, capture_output=True, text=True,
                                  timeout=20)

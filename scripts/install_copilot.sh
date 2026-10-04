@@ -1,5 +1,5 @@
 #!/bin/bash
-# Workflow Copilot for GitHub Copilot CLI - installer (safe to run more than once).
+# ModelMatch for GitHub Copilot CLI - installer (safe to run more than once).
 #
 #   bash scripts/install_copilot.sh               # the extension: popup + model switching (recommended)
 #   bash scripts/install_copilot.sh --hooks-only  # plain hooks: recommendations as notifications only
@@ -17,9 +17,9 @@ ok()   { printf "  \xE2\x9C\x85 %s\n" "$*"; }
 warn() { printf "  \xE2\x9A\xA0\xEF\xB8\x8F  %s\n" "$*"; }
 fail() { printf "  \xE2\x9D\x8C %s\n" "$*"; exit 1; }
 step() { printf "\n%s\n" "$*"; }
-HOOK="$REPO/hooks/workflow_copilot_copilot_hook.py"
+HOOK="$REPO/hooks/modelmatch_copilot_hook.py"
 
-echo "Workflow Copilot for Copilot CLI - install"
+echo "ModelMatch for Copilot CLI - install"
 
 step "1/6 Checking Python and Copilot CLI"
 PY="$(command -v python3)" || fail "python3 not found. Install Apple's command line tools: xcode-select --install"
@@ -48,10 +48,10 @@ mkdir -p "$REPO/logs" "$REPO/state" || fail "could not create logs/ and state/"
 if [ ! -f "$REPO/.env" ]; then cp "$REPO/.env.example" "$REPO/.env" && ok "created .env (settings only, no secrets yet)"; else ok ".env already exists (left unchanged)"; fi
 
 if [ "$MODE" = "extension" ]; then
-  step "4/6 Connecting Copilot (extension in ~/.copilot/extensions/workflow-copilot)"
+  step "4/6 Connecting Copilot (extension in ~/.copilot/extensions/modelmatch)"
   "$PY" "$REPO/scripts/copilot_settings_tool.py" install || fail "Copilot settings were NOT changed"
 else
-  step "4/6 Connecting Copilot (command hooks in ~/.copilot/hooks/workflow-copilot.json)"
+  step "4/6 Connecting Copilot (command hooks in ~/.copilot/hooks/modelmatch.json)"
   "$PY" "$REPO/scripts/copilot_settings_tool.py" install --hooks-only || fail "Copilot settings were NOT changed"
 fi
 ok "Copilot configured"
@@ -68,11 +68,11 @@ echo
 echo "Done. Next steps:"
 echo "  1. Quit any open Copilot session and start a new one: copilot"
 if [ "$MODE" = "extension" ]; then
-  echo "  2. You should see 'Workflow Copilot is on'. (Type /extensions to see 'workflow-copilot' listed.)"
-  echo "  3. Type a prompt. A 'Workflow Copilot' popup suggests a model: click Use or Keep current."
+  echo "  2. You should see 'ModelMatch is on'. (Type /extensions to see 'modelmatch' listed.)"
+  echo "  3. Type a prompt. A 'ModelMatch' popup suggests a model: click Use or Keep current."
   echo "     With Use, the prompt is answered by that model and your model is put back afterwards."
 else
   echo "  2. Type a prompt. A notification shows the recommended model; switch with /model if you agree."
 fi
-echo "  Keep this folder where it is: Copilot runs Workflow Copilot from $REPO."
+echo "  Keep this folder where it is: Copilot runs ModelMatch from $REPO."
 echo "  Problems? Run: bash \"$REPO/scripts/doctor_copilot.sh\""

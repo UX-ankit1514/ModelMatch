@@ -9,7 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOL = ROOT / "scripts" / "codex_settings_tool.py"
-MARKER = "workflow_copilot_codex_hook.py"
+MARKER = "modelmatch_codex_hook.py"
 OURS = "http://127.0.0.1:8788/v1"
 
 
@@ -19,7 +19,7 @@ def env(tmp_path):
     (home / ".codex").mkdir(parents=True)
     repo_env = tmp_path / "repo-env"  # where set_env.py would write; isolated via a copy of the scripts
     return {"HOME": str(home), "PATH": "/usr/bin:/bin", "CODEX_HOME": str(home / ".codex"),
-            "WORKFLOW_COPILOT_AGENTS_PORT": "8788", "WORKFLOW_COPILOT_CODEX_UPSTREAM_URL": "",
+            "MODELMATCH_AGENTS_PORT": "8788", "MODELMATCH_CODEX_UPSTREAM_URL": "",
             "_tmp": str(tmp_path), "_repo_env": str(repo_env)}
 
 
@@ -30,7 +30,7 @@ def repo_copy(tmp_path):
     copy = tmp_path / "repo"
     for folder in ("scripts", "proxy", "hooks"):
         shutil.copytree(str(ROOT / folder), str(copy / folder), ignore=shutil.ignore_patterns("__pycache__"))
-    (copy / ".env.example").write_text("WORKFLOW_COPILOT_PORT=8787\n")
+    (copy / ".env.example").write_text("MODELMATCH_PORT=8787\n")
     return copy
 
 
@@ -109,7 +109,7 @@ def test_routing_keeps_and_restores_a_previous_gateway(repo_copy, env):
     config.write_text(original)
     code, out = tool(repo_copy, env, "routing", "on")
     assert "previous openai_base_url" in out and "10100" in out
-    assert "WORKFLOW_COPILOT_CODEX_UPSTREAM_URL=http://127.0.0.1:10100/v1" in (repo_copy / ".env").read_text()
+    assert "MODELMATCH_CODEX_UPSTREAM_URL=http://127.0.0.1:10100/v1" in (repo_copy / ".env").read_text()
     text = config.read_text()
     assert 'openai_base_url = "{}"'.format(OURS) in text and "10100" in text  # kept in a marker comment
     code, out = tool(repo_copy, env, "routing", "off")
@@ -121,7 +121,7 @@ def test_prepare_upstream_records_the_current_gateway(repo_copy, env):
     (codex(env) / "config.toml").write_text('openai_base_url = "https://gateway.example/v1/"\n')
     code, out = tool(repo_copy, env, "prepare-upstream")
     assert code == 0 and "gateway.example" in out
-    assert "WORKFLOW_COPILOT_CODEX_UPSTREAM_URL=https://gateway.example/v1" in (repo_copy / ".env").read_text()
+    assert "MODELMATCH_CODEX_UPSTREAM_URL=https://gateway.example/v1" in (repo_copy / ".env").read_text()
 
 
 def test_routing_refused_for_custom_provider_or_shell_override(repo_copy, env):
@@ -138,7 +138,7 @@ def test_routing_refused_for_custom_provider_or_shell_override(repo_copy, env):
 
 def test_routing_requires_a_healthy_proxy_when_asked(repo_copy, env):
     (codex(env) / "config.toml").write_text('model = "x"\n')
-    env = dict(env, WORKFLOW_COPILOT_AGENTS_PORT="1")  # nothing listens there
+    env = dict(env, MODELMATCH_AGENTS_PORT="1")  # nothing listens there
     code, out = tool(repo_copy, env, "routing", "on", "--require-proxy")
     assert code == 1 and "isn't answering" in out
     assert (codex(env) / "config.toml").read_text() == 'model = "x"\n'

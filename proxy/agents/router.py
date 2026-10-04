@@ -1,4 +1,4 @@
-"""The Workflow Copilot router, for Codex and Copilot.
+"""The ModelMatch router, for Codex and Copilot.
 
 Same routers as the Claude Code proxy (proxy/router_client.py). The only difference:
 the planned /api/route contract says which tool is asking, so the cloud router can

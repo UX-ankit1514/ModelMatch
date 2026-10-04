@@ -4,7 +4,7 @@ Both talk to the agents proxy (proxy/agents/app.py, default 127.0.0.1:8788), the
 sibling of the Claude Code proxy that knows Codex's and Copilot's model lists.
 The .env parsing, HTTP helper and Use / Keep confirmation (macOS popup, terminal
 fallback) are the Claude Code hook's own, imported unchanged from
-workflow_copilot_hook.py, so all three tools ask the same question the same way.
+modelmatch_hook.py, so all three tools ask the same question the same way.
 
 Standard library only, Python 3.7+.
 """
@@ -25,11 +25,11 @@ HOOKS_DIR = Path(__file__).resolve().parent
 if str(HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(HOOKS_DIR))
 
-import workflow_copilot_hook as base  # noqa: E402  (the Claude Code hook; reused, never modified)
+import modelmatch_hook as base  # noqa: E402  (the Claude Code hook; reused, never modified)
 
 ROOT = base.ROOT
-SERVICE_NAME = "workflow-copilot-agents-proxy"
-LAUNCHD_LABEL = "com.workflowcopilot.agents-proxy"
+SERVICE_NAME = "modelmatch-agents-proxy"
+LAUNCHD_LABEL = "com.modelmatch.agents-proxy"
 HOOK_BUDGET_SECONDS = 100  # stays under the 120 s timeout the installers configure
 ProxyError = base.ProxyError
 HookDeadline = base.HookDeadline
@@ -64,28 +64,28 @@ class AgentConfig:
             return get(name, "0").lower() in ("1", "true", "yes", "on")
 
         self.tool = tool
-        self.host = get("WORKFLOW_COPILOT_HOST", "127.0.0.1")
-        self.port = int(number("WORKFLOW_COPILOT_AGENTS_PORT", 8788))
+        self.host = get("MODELMATCH_HOST", "127.0.0.1")
+        self.port = int(number("MODELMATCH_AGENTS_PORT", 8788))
         self.proxy_url = "http://{}:{}".format(self.host, self.port)
-        ui = get("WORKFLOW_COPILOT_CONFIRM_UI", "auto").lower()
+        ui = get("MODELMATCH_CONFIRM_UI", "auto").lower()
         self.confirm_ui = ui if ui in base.CONFIRM_UIS else "auto"
-        self.confirm_timeout = max(1.0, number("WORKFLOW_COPILOT_CONFIRM_TIMEOUT", 30))
-        self.recommend_timeout = max(2.0, number("WORKFLOW_COPILOT_API_TIMEOUT", 25) + 5)
-        self.disabled = flag("WORKFLOW_COPILOT_DISABLED") or flag("WORKFLOW_COPILOT_{}_DISABLED".format(tool.upper()))
-        self.log_prompts = flag("WORKFLOW_COPILOT_LOG_PROMPTS")
-        self.notify = get("WORKFLOW_COPILOT_NOTIFY", "1").lower() not in ("0", "false", "no", "off")
-        self.log_dir = Path(get("WORKFLOW_COPILOT_LOG_DIR", str(ROOT / "logs")))
-        self.state_dir = Path(get("WORKFLOW_COPILOT_STATE_DIR", str(ROOT / "state")))
-        self.venv_python = Path(get("WORKFLOW_COPILOT_PYTHON", str(ROOT / ".venv" / "bin" / "python")))
-        self.codex_home = Path(get("WORKFLOW_COPILOT_CODEX_HOME",
+        self.confirm_timeout = max(1.0, number("MODELMATCH_CONFIRM_TIMEOUT", 30))
+        self.recommend_timeout = max(2.0, number("MODELMATCH_API_TIMEOUT", 25) + 5)
+        self.disabled = flag("MODELMATCH_DISABLED") or flag("MODELMATCH_{}_DISABLED".format(tool.upper()))
+        self.log_prompts = flag("MODELMATCH_LOG_PROMPTS")
+        self.notify = get("MODELMATCH_NOTIFY", "1").lower() not in ("0", "false", "no", "off")
+        self.log_dir = Path(get("MODELMATCH_LOG_DIR", str(ROOT / "logs")))
+        self.state_dir = Path(get("MODELMATCH_STATE_DIR", str(ROOT / "state")))
+        self.venv_python = Path(get("MODELMATCH_PYTHON", str(ROOT / ".venv" / "bin" / "python")))
+        self.codex_home = Path(get("MODELMATCH_CODEX_HOME",
                                    get("CODEX_HOME", str(Path.home() / ".codex")))).expanduser()
-        self.launchd_plist = Path(get("WORKFLOW_COPILOT_LAUNCHD_PLIST", str(
+        self.launchd_plist = Path(get("MODELMATCH_LAUNCHD_PLIST", str(
             Path.home() / "Library" / "LaunchAgents" / (LAUNCHD_LABEL + ".plist"))))
-        self.use_launchd = sys.platform == "darwin" and not flag("WORKFLOW_COPILOT_NO_LAUNCHD")
+        self.use_launchd = sys.platform == "darwin" and not flag("MODELMATCH_NO_LAUNCHD")
 
 
 def setup_logging(cfg):
-    log = logging.getLogger("workflow_copilot." + cfg.tool)
+    log = logging.getLogger("modelmatch." + cfg.tool)
     log.setLevel(logging.INFO)
     log.propagate = False
     if log.handlers:

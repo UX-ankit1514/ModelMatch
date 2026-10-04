@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Workflow Copilot hook for Codex CLI.
+"""ModelMatch hook for Codex CLI.
 
 Handles two Codex hook events (dispatching on "hook_event_name" from stdin):
   SessionStart      make sure the local agents proxy is running and register the session. No routing.
@@ -16,7 +16,7 @@ object with a "systemMessage" for the user. (Plain stdout on these two events wo
 be added to the model's context, so nothing else is printed.)
 
 Also usable from the command line (used by the scripts in ../scripts):
-  python3 hooks/workflow_copilot_codex_hook.py --start-proxy | --stop-proxy | --status
+  python3 hooks/modelmatch_codex_hook.py --start-proxy | --stop-proxy | --status
 
 Standard library only, Python 3.7+.
 """
@@ -89,7 +89,7 @@ def handle_session_start(cfg, log, data):
 
     if not common.ensure_proxy(cfg, log, wait_seconds=8):
         log.warning("fallback triggered | proxy unavailable at session start")
-        message = "Workflow Copilot: the local proxy couldn't start, so there will be no model recommendations."
+        message = "ModelMatch: the local proxy couldn't start, so there will be no model recommendations."
         if routing:
             message += (" Model routing is on for Codex, so Codex may not reach its models. "
                         "Run: bash \"{}/scripts/doctor_codex.sh\"".format(common.ROOT))
@@ -98,7 +98,7 @@ def handle_session_start(cfg, log, data):
     common.register_session(cfg, log, CLIENT, session_id, data.get("cwd"), source, model)
     if source != "startup":
         return None
-    return "Workflow Copilot is on ({}).".format(
+    return "ModelMatch is on ({}).".format(
         "model routing active" if routing else "recommendations only, routing off")
 
 
@@ -122,18 +122,18 @@ def handle_user_prompt(cfg, log, data):
 
     if not common.ensure_proxy(cfg, log, wait_seconds=5):
         log.warning("fallback triggered | proxy unavailable | keeping current model")
-        return "Workflow Copilot is unavailable right now (local proxy not running). Continuing with your current model."
+        return "ModelMatch is unavailable right now (local proxy not running). Continuing with your current model."
 
     rec, error = common.get_recommendation(cfg, log, {
         "client": CLIENT, "session_id": session_id, "turn_id": turn_id, "prompt": prompt, "cwd": data.get("cwd"),
         "current_model": data.get("model")})
     if rec is None:
-        return "Workflow Copilot couldn't get a recommendation ({}). Continuing with your current model.".format(error)
+        return "ModelMatch couldn't get a recommendation ({}). Continuing with your current model.".format(error)
 
     name = rec["recommended_model"]
     reason = rec.get("recommendation_reason") or ""
     reason_text = " " + reason if reason else ""
-    substituted = (" (Workflow Copilot named {}; this is the closest model in your Codex list.)".format(
+    substituted = (" (ModelMatch named {}; this is the closest model in your Codex list.)".format(
         rec["substituted_from"]) if rec.get("substituted_from") else "")
 
     def save(accepted, decided_by):
@@ -142,15 +142,15 @@ def handle_user_prompt(cfg, log, data):
     if not rec.get("routable"):
         save(False, "unsupported")
         log.info("not applied | %s is not routable: %s", name, rec.get("routing_note"))
-        return "Workflow Copilot recommends {}.{} {} Keeping your current model.".format(
+        return "ModelMatch recommends {}.{} {} Keeping your current model.".format(
             name, reason_text, rec.get("routing_note") or "Codex can't switch to it.")
     if rec.get("same_as_current"):
         save(False, "already-current")
-        return "Workflow Copilot recommends {}, which is already your current model.".format(name)
+        return "ModelMatch recommends {}, which is already your current model.".format(name)
     if not routing_enabled(cfg):
         save(False, "routing-off")
         log.info("not applied | routing is off (openai_base_url in config.toml doesn't point at the proxy)")
-        return "Workflow Copilot recommends {}.{}{} (Recommendation only: model routing is off for Codex.)".format(
+        return "ModelMatch recommends {}.{}{} (Recommendation only: model routing is off for Codex.)".format(
             name, reason_text, substituted)
 
     decision, method, detail = common.confirm(cfg, rec)
@@ -160,17 +160,17 @@ def handle_user_prompt(cfg, log, data):
              " | " + detail if detail else "")
 
     if accepted and result.get("applied"):
-        return "Workflow Copilot: using {} for this prompt.{}{}".format(name, reason_text, substituted)
+        return "ModelMatch: using {} for this prompt.{}{}".format(name, reason_text, substituted)
     if accepted:
         log.warning("fallback triggered | accepted but the proxy did not apply the route | keeping current model")
-        return "Workflow Copilot couldn't apply {}. Keeping your current model.".format(name)
+        return "ModelMatch couldn't apply {}. Keeping your current model.".format(name)
     if decision == "rejected":
-        return "Workflow Copilot: kept your current model (recommended {}).".format(name)
+        return "ModelMatch: kept your current model (recommended {}).".format(name)
     if decision == "timeout":
-        return "Workflow Copilot: no answer within {:.0f}s, kept your current model (recommended {}).".format(
+        return "ModelMatch: no answer within {:.0f}s, kept your current model (recommended {}).".format(
             cfg.confirm_timeout, name)
     log.warning("fallback triggered | confirmation UI unavailable: %s | keeping current model", detail)
-    return ("Workflow Copilot recommends {}.{} The Use/Keep question couldn't be shown, so your current model "
+    return ("ModelMatch recommends {}.{} The Use/Keep question couldn't be shown, so your current model "
             "was kept.".format(name, reason_text))
 
 
@@ -185,7 +185,7 @@ def run_hook(cfg, log):
         # proxy, it must still be running or Codex couldn't reach its models.
         if event in ("SessionStart", "UserPromptSubmit") and routing_enabled(cfg):
             common.ensure_proxy(cfg, log, wait_seconds=8 if event == "SessionStart" else 5)
-        log.info("paused via WORKFLOW_COPILOT_DISABLED | %s ignored", event)
+        log.info("paused via MODELMATCH_DISABLED | %s ignored", event)
         return None
     if event == "UserPromptSubmit":
         unique = data.get("turn_id") or "{}-{}".format(common.fingerprint(data.get("prompt") or ""),
@@ -213,11 +213,11 @@ def main(argv):
     if code is not None:
         return code
     if len(argv) > 1:
-        print("usage: workflow_copilot_codex_hook.py [--start-proxy | --stop-proxy | --status]  (no args = hook mode)")
+        print("usage: modelmatch_codex_hook.py [--start-proxy | --stop-proxy | --status]  (no args = hook mode)")
         return 2
 
     message = common.run_with_deadline(log, lambda: run_hook(cfg, log),
-                                       "Workflow Copilot took too long, so your current model was kept.")
+                                       "ModelMatch took too long, so your current model was kept.")
     if message:
         try:
             sys.stdout.write(json.dumps({"systemMessage": message}))

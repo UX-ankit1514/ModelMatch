@@ -69,9 +69,9 @@ def codex_home(tmp_path):
 
 
 def make_client(tmp_path, codex_home, upstream=None, **env):
-    base = {"WORKFLOW_COPILOT_LOG_DIR": str(tmp_path / "logs"),
-            "WORKFLOW_COPILOT_AGENTS_STATE_FILE": str(tmp_path / "state" / "agents.json"),
-            "WORKFLOW_COPILOT_CODEX_HOME": str(codex_home)}
+    base = {"MODELMATCH_LOG_DIR": str(tmp_path / "logs"),
+            "MODELMATCH_AGENTS_STATE_FILE": str(tmp_path / "state" / "agents.json"),
+            "MODELMATCH_CODEX_HOME": str(codex_home)}
     base.update(env)
     settings = get_agent_settings(env=base, root=tmp_path)
     upstream = upstream or FakeUpstream()
@@ -114,7 +114,7 @@ def test_health_and_models(tmp_path, codex_home):
     client, _ = make_client(tmp_path, codex_home)
     with client:
         health = client.get("/health").json()
-        assert health["service"] == "workflow-copilot-agents-proxy" and health["router"] == "mock"
+        assert health["service"] == "modelmatch-agents-proxy" and health["router"] == "mock"
         models = client.get("/models/codex").json()
         assert models["models"] == ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]
         assert models["tiers"] == {"light": "gpt-5.6-luna", "standard": "gpt-5.6-terra", "heavy": "gpt-5.6-sol"}
@@ -136,7 +136,7 @@ def test_codex_recommendation_maps_to_codex_models(tmp_path, codex_home):
 
 
 def test_tier_pins_from_env(tmp_path, codex_home):
-    client, _ = make_client(tmp_path, codex_home, WORKFLOW_COPILOT_CODEX_LIGHT_MODEL="gpt-5.6-terra")
+    client, _ = make_client(tmp_path, codex_home, MODELMATCH_CODEX_LIGHT_MODEL="gpt-5.6-terra")
     with client:
         rec, _ = accept(client)
         assert rec["model_id"] == "gpt-5.6-terra"
@@ -185,7 +185,7 @@ def test_untouched_without_a_route(tmp_path, codex_home):
     assert sent["raw"] == raw  # byte for byte
     assert sent["url"] == "https://api.openai.com/v1/responses"
     assert sent["headers"]["authorization"] == "Bearer sk-secret"
-    assert "x-workflow-copilot-routed-model" not in response.headers
+    assert "x-modelmatch-routed-model" not in response.headers
 
 
 def test_accepted_turn_is_routed_and_adapted(tmp_path, codex_home):
@@ -193,7 +193,7 @@ def test_accepted_turn_is_routed_and_adapted(tmp_path, codex_home):
     with client:
         accept(client)
         response = client.post("/v1/responses", json=responses_request(), headers=codex_headers())
-        assert response.headers["x-workflow-copilot-routed-model"] == "gpt-5.6-luna"
+        assert response.headers["x-modelmatch-routed-model"] == "gpt-5.6-luna"
     body = upstream.requests[0]["body"]
     assert body["model"] == "gpt-5.6-luna"
     assert body["reasoning"] == {"effort": "medium"}  # high isn't offered by luna: nearest lower level
@@ -284,7 +284,7 @@ def test_upstream_choice(tmp_path, codex_home):
     assert upstream.requests[0]["url"] == "https://chatgpt.com/backend-api/codex/models?client_version=0.159.2"
 
     chained, upstream2 = make_client(tmp_path, codex_home,
-                                     WORKFLOW_COPILOT_CODEX_UPSTREAM_URL="http://127.0.0.1:10100/v1/")
+                                     MODELMATCH_CODEX_UPSTREAM_URL="http://127.0.0.1:10100/v1/")
     with chained:
         chained.post("/v1/responses", json=responses_request(), headers=codex_headers())
     assert upstream2.requests[0]["url"] == "http://127.0.0.1:10100/v1/responses"

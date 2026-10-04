@@ -1,6 +1,6 @@
 """Which model to use, among the models a tool can really run.
 
-Workflow Copilot may name any model. Codex and Copilot can only run the models in
+ModelMatch may name any model. Codex and Copilot can only run the models in
 their own list, so a recommendation is matched against that list, in this order:
 
 1. the same model. Names are compared by their words and version, so

@@ -1,6 +1,6 @@
-# Workflow Copilot for Codex CLI and GitHub Copilot CLI: research and plan
+# ModelMatch for Codex CLI and GitHub Copilot CLI: research and plan
 
-This is the structure plan behind the Codex and Copilot versions of Workflow Copilot. For
+This is the structure plan behind the Codex and Copilot versions of ModelMatch. For
 installing and everyday use, read [CODEX-COPILOT-GUIDE.md](CODEX-COPILOT-GUIDE.md).
 
 Nothing in the Claude Code version was changed. The new parts live in new files next to it and
@@ -16,7 +16,7 @@ reuse its code (router, session store, popup) by importing it.
 | You type a prompt | `UserPromptSubmit` hook asks the proxy for **one** recommended model |
 | You decide | macOS popup: **Use** / **Keep current** (30 s timeout keeps your model) |
 | Switch | Claude Code sends its API calls through the proxy (`ANTHROPIC_BASE_URL`); for the accepted prompt only, the proxy swaps the model and adapts the request |
-| Feedback | One line under the prompt (`systemMessage`): "Workflow Copilot: using Claude Haiku 4.5 for this prompt." |
+| Feedback | One line under the prompt (`systemMessage`): "ModelMatch: using Claude Haiku 4.5 for this prompt." |
 | Safety | Every failure keeps your model; the hook never blocks a prompt; a rejected switch is retried on your model |
 
 The goal: the same experience in Codex CLI and GitHub Copilot CLI.
@@ -84,7 +84,7 @@ account was needed).
 ```
 
 * **Agents proxy** (`proxy/agents/`): a sibling of the Claude proxy on port 8788. It reuses the
-  Claude proxy's router (built-in recommender or the Workflow Copilot cloud router), session store
+  Claude proxy's router (built-in recommender or the cloud router (the analyzer website)), session store
   and settings, and adds what Codex and Copilot need: their model lists, and Codex's API passthrough.
 * **Recommendation, then matching.** The router names any model. The agents proxy matches it to a
   model the tool can actually run: same model; else the newest model of the same family (and the
@@ -117,7 +117,7 @@ Codex ─► POST /v1/responses (session-id, turn_id) ─► agents proxy ─►
   fails the request passes through untouched (your model is kept).
 * Always on: once routing is on, *every* Codex surface (CLI, IDE, app) talks to the proxy, so a macOS
   LaunchAgent keeps it running from login. The hook still restarts it if needed.
-* The LaunchAgent runs from its own copy (`~/Library/Application Support/WorkflowCopilot/agents`: a venv,
+* The LaunchAgent runs from its own copy (`~/Library/Application Support/ModelMatch/agents`: a venv,
   the proxy code and a copy of `.env`), because macOS privacy protection ("Operation not permitted")
   stops background services from reading `~/Desktop`, `~/Documents` and `~/Downloads`, where this folder
   often lives. Found when the first real install on Desktop crash-looped; `restart` / `sync` refresh the copy.
@@ -132,7 +132,7 @@ You type ─► extension onUserPromptSubmitted ─► copilot hook script (reco
    Keep ─► nothing changes; a line in the timeline says why
 ```
 
-* Extension: `~/.copilot/extensions/workflow-copilot/extension.mjs` (needs experimental mode, which the
+* Extension: `~/.copilot/extensions/modelmatch/extension.mjs` (needs experimental mode, which the
   installer turns on in `~/.copilot/settings.json`; uninstall turns it off only if it turned it on).
 * Copilot 1.0.44 or newer is required for switching (first version where a prompt hook can answer
   without a model call). Older versions get recommendations only.
@@ -153,8 +153,8 @@ proxy/agents/                     agents proxy (Codex + Copilot)
   app.py                          the FastAPI app
 hooks/
   agents_common.py                shared hook code (config, proxy start/stop, recommend, popup)
-  workflow_copilot_codex_hook.py  Codex hook (SessionStart + UserPromptSubmit)
-  workflow_copilot_copilot_hook.py Copilot decision script (extension) + command-hook fallback
+  modelmatch_codex_hook.py  Codex hook (SessionStart + UserPromptSubmit)
+  modelmatch_copilot_hook.py Copilot decision script (extension) + command-hook fallback
   copilot-extension/extension.mjs Copilot extension (hooks + model switch)
 scripts/
   install_codex.sh  uninstall_codex.sh  doctor_codex.sh

@@ -50,8 +50,8 @@ class FakeUpstream:
 
 
 def make_client(tmp_path, upstream=None, **env):
-    base = {"WORKFLOW_COPILOT_LOG_DIR": str(tmp_path / "logs"),
-            "WORKFLOW_COPILOT_STATE_FILE": str(tmp_path / "state" / "sessions.json")}
+    base = {"MODELMATCH_LOG_DIR": str(tmp_path / "logs"),
+            "MODELMATCH_STATE_FILE": str(tmp_path / "state" / "sessions.json")}
     base.update(env)
     settings = get_settings(env=base, root=tmp_path)
     upstream = upstream or FakeUpstream()
@@ -72,7 +72,7 @@ def messages_request(model="claude-opus-5-5", stream=False, user_id=USER_ID):
             "messages": [{"role": "user", "content": "hi"}]}
 
 
-# -- Workflow Copilot endpoints -------------------------------------------------
+# -- ModelMatch endpoints -------------------------------------------------
 
 
 def test_health(tmp_path):
@@ -80,7 +80,7 @@ def test_health(tmp_path):
     with client:
         data = client.get("/health").json()
     assert data["status"] == "ok"
-    assert data["service"] == "workflow-copilot-proxy"
+    assert data["service"] == "modelmatch-proxy"
     assert data["router"] == "mock"
 
 
@@ -129,8 +129,8 @@ def test_stale_selection_is_rejected(tmp_path):
 
 
 def test_router_failure_returns_502_for_fail_open(tmp_path):
-    client, _ = make_client(tmp_path, WORKFLOW_COPILOT_API_URL="http://127.0.0.1:9/api/route",
-                            WORKFLOW_COPILOT_API_TIMEOUT="2")
+    client, _ = make_client(tmp_path, MODELMATCH_API_URL="http://127.0.0.1:9/api/route",
+                            MODELMATCH_API_TIMEOUT="2")
     with client:
         resp = client.post("/recommend", json={"session_id": SESSION, "prompt": "hi"})
     assert resp.status_code == 502
@@ -169,7 +169,7 @@ def test_passthrough_routes_accepted_model_and_streams(tmp_path):
         resp = client.post("/v1/messages", json=messages_request(stream=True),
                            headers={"authorization": "Bearer oauth-token"})
     assert resp.status_code == 200
-    assert resp.headers["x-workflow-copilot-routed-model"] == "claude-haiku-4-5"
+    assert resp.headers["x-modelmatch-routed-model"] == "claude-haiku-4-5"
     assert b"message_start" in resp.content
     sent = upstream.requests[0]
     assert sent["body"]["model"] == "claude-haiku-4-5"
@@ -205,7 +205,7 @@ def test_rejected_routed_request_falls_back_to_original_model(tmp_path):
         second = client.post("/v1/messages", json=messages_request())
         session = client.get("/session/" + SESSION).json()["session"]
     assert first.status_code == 200 and second.status_code == 200
-    assert "x-workflow-copilot-routed-model" not in first.headers
+    assert "x-modelmatch-routed-model" not in first.headers
     assert [r["body"]["model"] for r in upstream.requests] == ["claude-haiku-4-5", "claude-opus-5-5",
                                                                  "claude-opus-5-5"]
     assert session["route_status"] == "failed"

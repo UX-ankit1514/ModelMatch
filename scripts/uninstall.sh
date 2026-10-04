@@ -1,5 +1,5 @@
 #!/bin/bash
-# Workflow Copilot for Claude Code - uninstaller.
+# ModelMatch for Claude Code - uninstaller.
 # Removes ONLY what this project added: its two hooks, its ANTHROPIC_BASE_URL entry,
 # and (with --purge) its own .venv, logs and state folders. Settings files are backed up first.
 #
@@ -18,7 +18,7 @@ while [ $# -gt 0 ]; do
     *) echo "Unknown option: $1"; exit 2 ;;
   esac
 done
-echo "Workflow Copilot - uninstall"
+echo "ModelMatch - uninstall"
 echo
 if [ "$GLOBAL" = 1 ]; then
   echo "1/3 Removing Claude Code configuration (ALL sessions, user-level settings)"
@@ -29,7 +29,7 @@ else
 fi
 echo
 echo "2/3 Stopping the local proxy"
-echo "  $(python3 "$REPO/hooks/workflow_copilot_hook.py" --stop-proxy)"
+echo "  $(python3 "$REPO/hooks/modelmatch_hook.py" --stop-proxy)"
 echo "  (if you installed both globally and per project, remove the other one too)"
 echo
 echo "3/3 Local files"
@@ -41,4 +41,4 @@ else
   echo "  kept .venv/, logs/ and state/ (add --purge to delete them)"
 fi
 echo
-echo "Done. Restart any open Claude Code session so it stops using Workflow Copilot."
+echo "Done. Restart any open Claude Code session so it stops using ModelMatch."

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Workflow Copilot for GitHub Copilot CLI - uninstaller.
+# ModelMatch for GitHub Copilot CLI - uninstaller.
 # Removes ONLY what install_copilot.sh added: the extension (or the hooks file), and
 # experimental mode if the installer turned it on. --purge also deletes its own logs and state.
 #
@@ -14,16 +14,16 @@ while [ $# -gt 0 ]; do
     *) echo "Unknown option: $1"; exit 2 ;;
   esac
 done
-echo "Workflow Copilot for Copilot CLI - uninstall"
+echo "ModelMatch for Copilot CLI - uninstall"
 echo
-echo "1/3 Removing Workflow Copilot from Copilot"
+echo "1/3 Removing ModelMatch from Copilot"
 python3 "$REPO/scripts/copilot_settings_tool.py" uninstall
 echo
 echo "2/3 The local proxy"
 if [ -n "$(python3 "$REPO/scripts/codex_settings_tool.py" status --global 2>/dev/null | python3 -c 'import sys,json; print("x" if json.load(sys.stdin).get("routing_on") else "")' 2>/dev/null)" ]; then
-  echo "  left running: Workflow Copilot for Codex uses it (uninstall_codex.sh stops it)"
+  echo "  left running: ModelMatch for Codex uses it (uninstall_codex.sh stops it)"
 else
-  echo "  $(python3 "$REPO/hooks/workflow_copilot_copilot_hook.py" --stop-proxy)"
+  echo "  $(python3 "$REPO/hooks/modelmatch_copilot_hook.py" --stop-proxy)"
 fi
 echo
 echo "3/3 Local files"
@@ -35,4 +35,4 @@ else
   echo "  kept logs/ and state/ (add --purge to delete Copilot's files there)"
 fi
 echo
-echo "Done. Restart any open Copilot session so it stops using Workflow Copilot."
+echo "Done. Restart any open Copilot session so it stops using ModelMatch."

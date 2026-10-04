@@ -3,12 +3,12 @@
 It reads the same .env as the Claude Code proxy and shares its keys (router URL and
 key, timeouts, log folder, prompt logging). Only what has to differ has its own key:
 
-    WORKFLOW_COPILOT_AGENTS_PORT         default 8788 (the Claude Code proxy keeps 8787)
-    WORKFLOW_COPILOT_AGENTS_STATE_FILE   default state/agents-sessions.json
-    WORKFLOW_COPILOT_CODEX_UPSTREAM_URL  where Codex's model requests go (empty = automatic)
-    WORKFLOW_COPILOT_CODEX_HOME          Codex's settings folder (default $CODEX_HOME or ~/.codex)
-    WORKFLOW_COPILOT_<TOOL>_<SIZE>_MODEL pin the model used for a size, e.g.
-                                         WORKFLOW_COPILOT_CODEX_LIGHT_MODEL=gpt-5.6-luna
+    MODELMATCH_AGENTS_PORT         default 8788 (the Claude Code proxy keeps 8787)
+    MODELMATCH_AGENTS_STATE_FILE   default state/agents-sessions.json
+    MODELMATCH_CODEX_UPSTREAM_URL  where Codex's model requests go (empty = automatic)
+    MODELMATCH_CODEX_HOME          Codex's settings folder (default $CODEX_HOME or ~/.codex)
+    MODELMATCH_<TOOL>_<SIZE>_MODEL pin the model used for a size, e.g.
+                                         MODELMATCH_CODEX_LIGHT_MODEL=gpt-5.6-luna
 """
 
 import os
@@ -36,7 +36,7 @@ class AgentSettings:
 
 
 def codex_home_from(get) -> Path:
-    return Path(get("WORKFLOW_COPILOT_CODEX_HOME", get("CODEX_HOME", str(Path.home() / ".codex")))).expanduser()
+    return Path(get("MODELMATCH_CODEX_HOME", get("CODEX_HOME", str(Path.home() / ".codex")))).expanduser()
 
 
 def get_agent_settings(env: Optional[Dict[str, str]] = None, root: Path = PROJECT_ROOT) -> AgentSettings:
@@ -51,12 +51,12 @@ def get_agent_settings(env: Optional[Dict[str, str]] = None, root: Path = PROJEC
         return default if value is None or str(value).strip() == "" else str(value).strip()
 
     base = replace(get_settings(env=merged, root=root),
-                   port=_int(get("WORKFLOW_COPILOT_AGENTS_PORT"), DEFAULT_AGENTS_PORT),
-                   state_file=Path(get("WORKFLOW_COPILOT_AGENTS_STATE_FILE",
+                   port=_int(get("MODELMATCH_AGENTS_PORT"), DEFAULT_AGENTS_PORT),
+                   state_file=Path(get("MODELMATCH_AGENTS_STATE_FILE",
                                        str(root / "state" / "agents-sessions.json"))))
     overrides = {}
     for client in CLIENTS:
-        picks = {tier: get("WORKFLOW_COPILOT_{}_{}_MODEL".format(client.upper(), tier.upper())) for tier in TIERS}
+        picks = {tier: get("MODELMATCH_{}_{}_MODEL".format(client.upper(), tier.upper())) for tier in TIERS}
         overrides[client] = {tier: model for tier, model in picks.items() if model}
-    return AgentSettings(base=base, codex_upstream_url=get("WORKFLOW_COPILOT_CODEX_UPSTREAM_URL").rstrip("/"),
+    return AgentSettings(base=base, codex_upstream_url=get("MODELMATCH_CODEX_UPSTREAM_URL").rstrip("/"),
                          codex_home=codex_home_from(get), tier_overrides=overrides)

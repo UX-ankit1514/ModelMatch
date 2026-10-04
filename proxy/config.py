@@ -93,23 +93,23 @@ def get_settings(env: Optional[Dict[str, str]] = None, root: Path = PROJECT_ROOT
         value = merged.get(name)
         return default if value is None or value == "" else value.strip()
 
-    api_url = get("WORKFLOW_COPILOT_API_URL")
-    api_style = get("WORKFLOW_COPILOT_API_STYLE").lower()
+    api_url = get("MODELMATCH_API_URL")
+    api_style = get("MODELMATCH_API_STYLE").lower()
     if api_style not in ("route", "analyze"):
-        # The existing Workflow Copilot site exposes /api/analyze (free-text
+        # The existing analyzer website exposes /api/analyze (free-text
         # answer); anything else is assumed to follow the /api/route contract.
         api_style = "analyze" if urlparse(api_url).path.rstrip("/").endswith("/analyze") else "route"
 
     return Settings(
-        host=get("WORKFLOW_COPILOT_HOST", DEFAULT_HOST),
-        port=_int(get("WORKFLOW_COPILOT_PORT"), DEFAULT_PORT),
+        host=get("MODELMATCH_HOST", DEFAULT_HOST),
+        port=_int(get("MODELMATCH_PORT"), DEFAULT_PORT),
         api_url=api_url,
         api_style=api_style,
-        api_key=get("WORKFLOW_COPILOT_API_KEY"),
-        api_timeout=_float(get("WORKFLOW_COPILOT_API_TIMEOUT"), 25.0),
-        max_prompt_chars=_int(get("WORKFLOW_COPILOT_MAX_PROMPT_CHARS"), 8000),
-        upstream_url=get("WORKFLOW_COPILOT_UPSTREAM_URL", DEFAULT_UPSTREAM).rstrip("/"),
-        state_file=Path(get("WORKFLOW_COPILOT_STATE_FILE", str(root / "state" / "sessions.json"))),
-        log_dir=Path(get("WORKFLOW_COPILOT_LOG_DIR", str(root / "logs"))),
-        log_prompts=_flag(get("WORKFLOW_COPILOT_LOG_PROMPTS", "0")),
+        api_key=get("MODELMATCH_API_KEY"),
+        api_timeout=_float(get("MODELMATCH_API_TIMEOUT"), 25.0),
+        max_prompt_chars=_int(get("MODELMATCH_MAX_PROMPT_CHARS"), 8000),
+        upstream_url=get("MODELMATCH_UPSTREAM_URL", DEFAULT_UPSTREAM).rstrip("/"),
+        state_file=Path(get("MODELMATCH_STATE_FILE", str(root / "state" / "sessions.json"))),
+        log_dir=Path(get("MODELMATCH_LOG_DIR", str(root / "logs"))),
+        log_prompts=_flag(get("MODELMATCH_LOG_PROMPTS", "0")),
     )

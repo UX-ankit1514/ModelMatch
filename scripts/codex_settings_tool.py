@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safely add/remove Workflow Copilot entries in Codex CLI's settings.
+"""Safely add/remove ModelMatch entries in Codex CLI's settings.
 
   codex_settings_tool.py install   (--global | PROJECT_DIR)
   codex_settings_tool.py uninstall (--global | PROJECT_DIR)
@@ -14,11 +14,11 @@ Scopes
                user-level file, so it always applies to every Codex session.
 
 Safety
-  * Only hook entries whose command mentions workflow_copilot_codex_hook.py are touched.
+  * Only hook entries whose command mentions modelmatch_codex_hook.py are touched.
   * config.toml is edited line by line: only a top-level openai_base_url line and Workflow
     Copilot's marker comments are added, replaced or removed. Everything else stays as it was.
-  * A previous openai_base_url (another gateway, e.g. opencodex) becomes Workflow Copilot's
-    upstream (WORKFLOW_COPILOT_CODEX_UPSTREAM_URL in .env) and is restored on uninstall.
+  * A previous openai_base_url (another gateway, e.g. opencodex) becomes ModelMatch's
+    upstream (MODELMATCH_CODEX_UPSTREAM_URL in .env) and is restored on uninstall.
   * Routing is refused when Codex uses a custom model_provider, or when a shell startup file
     sets OPENAI_BASE_URL (it would silently win over config.toml).
   * Every file is backed up (<file>.bak-<timestamp>) before it is changed; an unreadable or
@@ -39,15 +39,15 @@ sys.path.insert(0, str(REPO / "scripts"))
 
 from proxy.agents.codex_config import parse_scalar, scan_top_level  # noqa: E402
 
-MARKER = "workflow_copilot_codex_hook.py"
+MARKER = "modelmatch_codex_hook.py"
 EVENTS = {
-    "SessionStart": {"matcher": "startup|resume|clear", "timeout": 30, "statusMessage": "Workflow Copilot: starting..."},
-    "UserPromptSubmit": {"timeout": 120, "statusMessage": "Workflow Copilot: choosing the best model..."},
+    "SessionStart": {"matcher": "startup|resume|clear", "timeout": 30, "statusMessage": "ModelMatch: starting..."},
+    "UserPromptSubmit": {"timeout": 120, "statusMessage": "ModelMatch: choosing the best model..."},
 }
-ROUTING_COMMENT = "# workflow-copilot: model routing through the local proxy (uninstall_codex.sh removes this)"
-PREVIOUS_PREFIX = "# workflow-copilot: previous openai_base_url = "
+ROUTING_COMMENT = "# modelmatch: model routing through the local proxy (uninstall_codex.sh removes this)"
+PREVIOUS_PREFIX = "# modelmatch: previous openai_base_url = "
 SHELL_FILES = (".zshrc", ".zprofile", ".zshenv", ".bashrc", ".bash_profile", ".profile")
-UPSTREAM_KEY = "WORKFLOW_COPILOT_CODEX_UPSTREAM_URL"
+UPSTREAM_KEY = "MODELMATCH_CODEX_UPSTREAM_URL"
 
 
 def agent_settings():
@@ -226,7 +226,7 @@ def proxy_is_healthy():
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         with opener.open(url, timeout=3) as response:
-            return json.loads(response.read()).get("service") == "workflow-copilot-agents-proxy"
+            return json.loads(response.read()).get("service") == "modelmatch-agents-proxy"
     except (OSError, ValueError):
         return False
 
@@ -281,9 +281,9 @@ def uninstall(scope, project_dir):
     removed = remove_hooks(settings)
     if removed:
         write_text(path, json.dumps(settings, indent=2) + "\n")
-        print("  removed {} Workflow Copilot hook(s) from {}".format(removed, path))
+        print("  removed {} ModelMatch hook(s) from {}".format(removed, path))
     else:
-        print("  no Workflow Copilot hooks in {}".format(path))
+        print("  no ModelMatch hooks in {}".format(path))
 
 
 def prepare_upstream():
@@ -294,7 +294,7 @@ def prepare_upstream():
     ours = proxy_base_url()
     if isinstance(current, str) and current.strip() and current.rstrip("/") != ours.rstrip("/"):
         set_env(UPSTREAM_KEY, current.strip().rstrip("/"))
-        print("  Codex already uses a gateway: {} (Workflow Copilot will forward to it)".format(current))
+        print("  Codex already uses a gateway: {} (ModelMatch will forward to it)".format(current))
     else:
         upstream = agent_settings().codex_upstream_url
         print("  upstream: {}".format(upstream or "automatic (ChatGPT sign-in -> chatgpt.com, API key -> api.openai.com)"))
@@ -321,7 +321,7 @@ def routing(state, require_proxy):
         new_text, previous, changed = set_base_url(text, url)
         if previous:
             set_env(UPSTREAM_KEY, previous.rstrip("/"))
-            print("  kept your previous openai_base_url as Workflow Copilot's upstream: {}".format(previous))
+            print("  kept your previous openai_base_url as ModelMatch's upstream: {}".format(previous))
         if changed:
             write_text(config_path, new_text)
             print("  model routing on: openai_base_url = {} in {}".format(url, config_path))
@@ -334,7 +334,7 @@ def routing(state, require_proxy):
         if restored:
             print("  model routing off: openai_base_url restored to {}".format(restored))
         else:
-            print("  model routing off (removed Workflow Copilot's openai_base_url)")
+            print("  model routing off (removed ModelMatch's openai_base_url)")
     else:
         print("  model routing was not on")
     return 0

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Workflow Copilot for GitHub Copilot CLI - health check. Changes nothing.
+# ModelMatch for GitHub Copilot CLI - health check. Changes nothing.
 #
 #   bash scripts/doctor_copilot.sh
 set -u
@@ -10,10 +10,10 @@ ok()   { printf "  \xE2\x9C\x85 %s\n" "$*"; }
 warn() { printf "  \xE2\x9A\xA0\xEF\xB8\x8F  %s\n" "$*"; }
 bad()  { printf "  \xE2\x9D\x8C %s\n" "$*"; PROBLEMS=$((PROBLEMS + 1)); }
 fix()  { printf "     fix: %s\n" "$*"; }
-HOOK="$REPO/hooks/workflow_copilot_copilot_hook.py"
+HOOK="$REPO/hooks/modelmatch_copilot_hook.py"
 jget() { printf '%s' "$1" | python3 -c "import sys,json; v=json.load(sys.stdin).get('$2'); print('' if v is None else v)" 2>/dev/null; }
 
-echo "Workflow Copilot for Copilot CLI - doctor"
+echo "ModelMatch for Copilot CLI - doctor"
 echo
 echo "Software"
 if command -v python3 >/dev/null && python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)'; then
@@ -41,7 +41,7 @@ echo
 echo "Copilot configuration"
 STAT="$(python3 "$REPO/scripts/copilot_settings_tool.py" status 2>/dev/null)"
 if [ "$(jget "$STAT" extension_installed)" = "True" ]; then
-  ok "extension installed in $(jget "$STAT" copilot_home)/extensions/workflow-copilot"
+  ok "extension installed in $(jget "$STAT" copilot_home)/extensions/modelmatch"
   if [ "$(jget "$STAT" extension_up_to_date)" != "True" ]; then
     warn "the installed extension is older than this folder's copy"; fix "bash \"$REPO/scripts/install_copilot.sh\""
   fi
@@ -53,7 +53,7 @@ if [ "$(jget "$STAT" extension_installed)" = "True" ]; then
 elif [ "$(jget "$STAT" hooks_only_installed)" = "True" ]; then
   ok "command hooks installed (recommendations as notifications, no switching)"
 else
-  bad "Workflow Copilot is not installed in Copilot"; fix "bash \"$REPO/scripts/install_copilot.sh\""
+  bad "ModelMatch is not installed in Copilot"; fix "bash \"$REPO/scripts/install_copilot.sh\""
 fi
 if [ "$(jget "$STAT" all_hooks_disabled)" = "True" ]; then
   bad "disableAllHooks is on in ~/.copilot/settings.json"; fix "remove \"disableAllHooks\" from that file"

@@ -1,10 +1,10 @@
-"""Workflow Copilot proxy for Codex CLI and GitHub Copilot CLI (the "agents proxy").
+"""ModelMatch proxy for Codex CLI and GitHub Copilot CLI (the "agents proxy").
 
 Run:  .venv/bin/python -m uvicorn proxy.agents.app:create_app --factory --host 127.0.0.1 --port 8788 --ws none
 
 Endpoints
     GET  /health                 liveness + configuration summary
-    GET  /models/{client}        the models Workflow Copilot can switch to, and its light/standard/heavy picks
+    GET  /models/{client}        the models ModelMatch can switch to, and its light/standard/heavy picks
     POST /session/start          register a Codex / Copilot session (SessionStart hooks)
     GET  /session/{client}/{id}  inspect a session's state (debugging)
     POST /recommend              ONE recommendation for a prompt, matched to the tool's own models
@@ -45,8 +45,8 @@ from .config import CLIENTS, AgentSettings, get_agent_settings
 from .responses import adapt_request, decode_body, request_identity, zstd_available
 from .router import build_agent_router
 
-LOGGER_NAME = "workflow_copilot.agents"
-SERVICE_NAME = "workflow-copilot-agents-proxy"
+LOGGER_NAME = "modelmatch.agents"
+SERVICE_NAME = "modelmatch-agents-proxy"
 CHATGPT_UPSTREAM = "https://chatgpt.com/backend-api/codex"
 OPENAI_UPSTREAM = "https://api.openai.com/v1"
 WHERE = {"codex": "your Codex model list", "copilot": "your Copilot plan"}
@@ -181,7 +181,7 @@ def create_app(settings: Optional[AgentSettings] = None,
             await app.state.upstream.aclose()
             log.info("proxy stopped | pid=%s", os.getpid())
 
-    app = FastAPI(title="Workflow Copilot agents proxy", version=__version__, lifespan=lifespan,
+    app = FastAPI(title="ModelMatch agents proxy", version=__version__, lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store = store
     app.state.settings = settings
@@ -191,7 +191,7 @@ def create_app(settings: Optional[AgentSettings] = None,
             return None
         return JSONResponse(status_code=400, content={"ok": False, "error": "unknown client " + repr(client)})
 
-    # -- Workflow Copilot endpoints ---------------------------------------------
+    # -- ModelMatch endpoints ---------------------------------------------
 
     @app.get("/health")
     async def health():
@@ -341,7 +341,7 @@ def create_app(settings: Optional[AgentSettings] = None,
             if not seen["warned_ws"]:
                 seen["warned_ws"] = True
                 log.info("websocket upgrade refused (426) | Codex falls back to HTTPS")
-            return openai_error(426, "Workflow Copilot proxy: use HTTPS for this endpoint.", "upgrade_required")
+            return openai_error(426, "ModelMatch proxy: use HTTPS for this endpoint.", "upgrade_required")
 
         body = await request.body()
         url = codex_upstream(request.headers) + "/" + path
@@ -399,14 +399,14 @@ def create_app(settings: Optional[AgentSettings] = None,
                 response = await send_upstream(request, url, headers, body)
         except httpx.HTTPError as exc:
             log.error("upstream error | %s /v1/%s | %s", request.method, path, type(exc).__name__)
-            return openai_error(502, "Workflow Copilot proxy could not reach the upstream API ({}).".format(
+            return openai_error(502, "ModelMatch proxy could not reach the upstream API ({}).".format(
                 type(exc).__name__))
 
         if response.status_code >= 400 and path.rstrip("/") == "responses":
             log.warning("upstream HTTP %s | %s /v1/%s", response.status_code, request.method, path)
         response_headers = {k: v for k, v in response.headers.items() if k.lower() not in HOP_BY_HOP}
         if routed:
-            response_headers["x-workflow-copilot-routed-model"] = routed[2]
+            response_headers["x-modelmatch-routed-model"] = routed[2]
         return StreamingResponse(response.aiter_raw(), status_code=response.status_code, headers=response_headers,
                                  background=BackgroundTask(response.aclose))
 

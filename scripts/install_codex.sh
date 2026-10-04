@@ -1,5 +1,5 @@
 #!/bin/bash
-# Workflow Copilot for Codex CLI - installer (safe to run more than once).
+# ModelMatch for Codex CLI - installer (safe to run more than once).
 #
 #   bash scripts/install_codex.sh                     # every Codex session, with model routing
 #   bash scripts/install_codex.sh --no-routing        # every Codex session, recommendations only
@@ -20,11 +20,11 @@ ok()   { printf "  \xE2\x9C\x85 %s\n" "$*"; }
 warn() { printf "  \xE2\x9A\xA0\xEF\xB8\x8F  %s\n" "$*"; }
 fail() { printf "  \xE2\x9D\x8C %s\n" "$*"; exit 1; }
 step() { printf "\n%s\n" "$*"; }
-HOOK="$REPO/hooks/workflow_copilot_codex_hook.py"
+HOOK="$REPO/hooks/modelmatch_codex_hook.py"
 TOOL="$REPO/scripts/codex_settings_tool.py"
 SERVICE="$REPO/scripts/agents_service.py"
 
-echo "Workflow Copilot for Codex - install"
+echo "ModelMatch for Codex - install"
 
 step "1/7 Checking Python and Codex"
 PY="$(command -v python3)" || fail "python3 not found. Install Apple's command line tools: xcode-select --install"
@@ -107,16 +107,16 @@ try:
 except OSError as exc:
     print("  could not read Codex's models: %s" % exc); sys.exit(0)
 tiers = data.get("tiers") or {}
-print("  Codex models Workflow Copilot can switch to: %s" % (", ".join(data.get("models") or []) or "none found"))
+print("  Codex models ModelMatch can switch to: %s" % (", ".join(data.get("models") or []) or "none found"))
 print("  light: %s | standard: %s | heavy: %s" % (tiers.get("light", "-"), tiers.get("standard", "-"), tiers.get("heavy", "-")))
-print("  (pin your own in .env, e.g. WORKFLOW_COPILOT_CODEX_LIGHT_MODEL=<model>)")
+print("  (pin your own in .env, e.g. MODELMATCH_CODEX_LIGHT_MODEL=<model>)")
 EOF
 
 echo
 echo "Done. Next steps:"
 echo "  1. Quit any open Codex session and start a new one: codex"
-echo "  2. Codex will say new hooks need review. Type /hooks, check the two 'Workflow Copilot' hooks"
+echo "  2. Codex will say new hooks need review. Type /hooks, check the two 'ModelMatch' hooks"
 echo "     (they run python3 \"$HOOK\") and trust them. Codex skips hooks until you do."
-echo "  3. Type a prompt. A 'Workflow Copilot' popup suggests a model: click Use or Keep current."
+echo "  3. Type a prompt. A 'ModelMatch' popup suggests a model: click Use or Keep current."
 echo "  Keep this folder where it is: Codex runs the hook from $REPO."
 echo "  Problems? Run: bash \"$REPO/scripts/doctor_codex.sh\""

@@ -14,8 +14,8 @@ def run(coro):
 
 
 def settings(tmp_path, **env):
-    base = {"WORKFLOW_COPILOT_LOG_DIR": str(tmp_path / "logs"),
-            "WORKFLOW_COPILOT_STATE_FILE": str(tmp_path / "state.json")}
+    base = {"MODELMATCH_LOG_DIR": str(tmp_path / "logs"),
+            "MODELMATCH_STATE_FILE": str(tmp_path / "state.json")}
     base.update(env)
     return get_settings(env=base, root=tmp_path)
 
@@ -39,9 +39,9 @@ def test_mock_router(prompt, expected):
 
 def test_build_router_picks_backend(tmp_path):
     assert isinstance(build_router(settings(tmp_path)), MockRouter)
-    assert isinstance(build_router(settings(tmp_path, WORKFLOW_COPILOT_API_URL="https://x.test/api/route")),
+    assert isinstance(build_router(settings(tmp_path, MODELMATCH_API_URL="https://x.test/api/route")),
                       CloudRouteClient)
-    assert isinstance(build_router(settings(tmp_path, WORKFLOW_COPILOT_API_URL="https://x.test/api/analyze")),
+    assert isinstance(build_router(settings(tmp_path, MODELMATCH_API_URL="https://x.test/api/analyze")),
                       CloudAnalyzeClient)
 
 
@@ -49,7 +49,7 @@ def test_build_router_picks_backend(tmp_path):
 
 
 def route_client(tmp_path, handler, **env):
-    env.setdefault("WORKFLOW_COPILOT_API_URL", "https://wc.test/api/route")
+    env.setdefault("MODELMATCH_API_URL", "https://wc.test/api/route")
     return CloudRouteClient(settings(tmp_path, **env), transport=httpx.MockTransport(handler))
 
 
@@ -62,8 +62,8 @@ def test_cloud_route_success_sends_minimum_data(tmp_path):
         return httpx.Response(200, json={"recommended_model": "Claude Sonnet 5.5", "reason": " Good  at code. ",
                                          "confidence": 0.91})
 
-    client = route_client(tmp_path, handler, WORKFLOW_COPILOT_MAX_PROMPT_CHARS="10",
-                          WORKFLOW_COPILOT_API_KEY="secret-test-key")
+    client = route_client(tmp_path, handler, MODELMATCH_MAX_PROMPT_CHARS="10",
+                          MODELMATCH_API_KEY="secret-test-key")
     result = run(client.recommend("a" * 50))
     assert result.recommended_model == "Claude Sonnet 5.5"
     assert result.reason == "Good at code."
@@ -136,14 +136,14 @@ def test_cloud_analyze_client(tmp_path):
         seen["body"] = json.loads(request.content)
         return httpx.Response(200, json={"choices": [{"message": {"content": ANALYZE_TEXT}}]})
 
-    client = CloudAnalyzeClient(settings(tmp_path, WORKFLOW_COPILOT_API_URL="https://wc.test/api/analyze"),
+    client = CloudAnalyzeClient(settings(tmp_path, MODELMATCH_API_URL="https://wc.test/api/analyze"),
                                 transport=httpx.MockTransport(handler))
     result = run(client.recommend("What is the capital of France?"))
     assert result.recommended_model == "Gemini 3.5 Flash"
     assert result.confidence is None
     assert seen["body"] == {"prompt": "What is the capital of France?"}
 
-    broken = CloudAnalyzeClient(settings(tmp_path, WORKFLOW_COPILOT_API_URL="https://wc.test/api/analyze"),
+    broken = CloudAnalyzeClient(settings(tmp_path, MODELMATCH_API_URL="https://wc.test/api/analyze"),
                                 transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"choices": []})))
     with pytest.raises(RouterError):
         run(broken.recommend("hi"))

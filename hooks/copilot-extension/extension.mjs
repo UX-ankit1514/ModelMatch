@@ -1,11 +1,11 @@
-// Workflow Copilot for GitHub Copilot CLI (a Copilot CLI extension).
+// ModelMatch for GitHub Copilot CLI (a Copilot CLI extension).
 //
-// scripts/install_copilot.sh copies this file to ~/.copilot/extensions/workflow-copilot/,
-// next to a workflow-copilot.json that says where the Workflow Copilot folder is. Copilot
+// scripts/install_copilot.sh copies this file to ~/.copilot/extensions/modelmatch/,
+// next to a modelmatch.json that says where the ModelMatch folder is. Copilot
 // loads it when experimental mode is on. It registers two hooks:
 //
 //   onSessionStart         make sure the local proxy is running and register the session
-//   onUserPromptSubmitted  ask hooks/workflow_copilot_copilot_hook.py for ONE recommendation
+//   onUserPromptSubmitted  ask hooks/modelmatch_copilot_hook.py for ONE recommendation
 //                          (it shows the Use / Keep popup) and, if you click Use, run this
 //                          prompt on that model
 //
@@ -43,7 +43,7 @@ let pending = null;
 
 function loadSettings() {
   try {
-    const data = JSON.parse(readFileSync(join(HERE, "workflow-copilot.json"), "utf8"));
+    const data = JSON.parse(readFileSync(join(HERE, "modelmatch.json"), "utf8"));
     if (data && typeof data.repo === "string") return { repo: data.repo, python: data.python || "python3" };
   } catch {
     // not installed by the installer: nothing to do
@@ -98,7 +98,7 @@ function versionAtLeast(version, minimum) {
   return true;
 }
 
-// Ask hooks/workflow_copilot_copilot_hook.py. Resolves to its JSON answer, or null on any problem.
+// Ask hooks/modelmatch_copilot_hook.py. Resolves to its JSON answer, or null on any problem.
 function askDecision(payload) {
   return new Promise((resolve) => {
     if (!settings) return resolve(null);
@@ -112,7 +112,7 @@ function askDecision(payload) {
     };
     let child;
     try {
-      child = spawn(settings.python, [join(settings.repo, "hooks", "workflow_copilot_copilot_hook.py"), "--extension"], {
+      child = spawn(settings.python, [join(settings.repo, "hooks", "modelmatch_copilot_hook.py"), "--extension"], {
         stdio: ["pipe", "pipe", "ignore"],
       });
     } catch (error) {
@@ -239,14 +239,14 @@ async function switchForThisPrompt(prompt, sessionId, current, answer) {
     result = await session.rpc.model.switchTo({ modelId: answer.model_id });
   } catch (error) {
     report(false, `switch to ${answer.model_id} failed: ${error}`, sessionId);
-    await say(`Workflow Copilot couldn't switch to ${answer.model_name}. Keeping your current model.`);
+    await say(`ModelMatch couldn't switch to ${answer.model_name}. Keeping your current model.`);
     return undefined;
   }
   const failed = ["failed", "rejected", "error", "unavailable", "cancelled"].includes(String(result?.status || ""));
   if (result?.confirmation || failed) {
     // e.g. the target's context window needs the conversation compacted first: never do that silently
     report(false, `switch to ${answer.model_id} not applied (${result?.status || "needs confirmation"})`, sessionId);
-    await say(`Workflow Copilot didn't switch to ${answer.model_name} (Copilot asked for a confirmation). ` +
+    await say(`ModelMatch didn't switch to ${answer.model_name} (Copilot asked for a confirmation). ` +
       "Keeping your current model.");
     return undefined;
   }
@@ -282,7 +282,7 @@ async function resend(attachments) {
     const done = pending;
     pending = null;
     await restore(done);
-    await say("Workflow Copilot couldn't re-send your prompt, so please send it again. Your model was put back.");
+    await say("ModelMatch couldn't re-send your prompt, so please send it again. Your model was put back.");
   }
 }
 
@@ -297,7 +297,7 @@ async function restore(done) {
     log("INFO", `restored | ${done.target} -> ${done.restoreTo}`);
   } catch (error) {
     log("ERROR", `could not switch back to ${done.restoreTo}: ${error}`);
-    await say(`Workflow Copilot couldn't switch back to ${done.restoreTo}. Use /model to pick it again.`);
+    await say(`ModelMatch couldn't switch back to ${done.restoreTo}. Use /model to pick it again.`);
   }
 }
 
