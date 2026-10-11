@@ -21,6 +21,8 @@
 - [What it solves](#what-it-solves)
 - [How it works under the hood](#how-it-works-under-the-hood)
 - [ModelMatch V2: smarter routing](#modelmatch-v2-smarter-routing)
+  - [Turning V2 on](#turning-v2-on)
+  - [Is it helping?](#is-it-helping)
 - [Tech stack](#tech-stack)
 - [Repository layout](#repository-layout)
 - [Getting started](#getting-started)
@@ -81,6 +83,12 @@ ModelMatch moves that decision into Claude Code itself, and asks you only one qu
 > There are no modes, tiers or settings to learn. Every prompt gets exactly **one** recommendation,
 > and nothing changes unless you click **Use**.
 
+> [!TIP]
+> **New: ModelMatch V2.** Turn it on and ModelMatch gets quieter and smarter. It understands
+> what each task really needs, learns from what actually worked for you, and won't suggest a
+> switch that would cost more than staying. Most prompts get no popup at all; it only asks when
+> there's a real choice to make. [How to turn it on](#modelmatch-v2-smarter-routing).
+
 ### Who uses what
 
 | You are... | You use | You can |
@@ -126,6 +134,14 @@ set of settings, and they can be installed side by side.
 - **You stay in control.** Nothing switches unless you click **Use**. Ignore the popup and your model stays.
 - **You always know what answered.** A one-line note under each prompt says which model was used, and why.
 - **Quiet when it should be.** No popup for slash commands, for automated scripts (`claude -p`), or when the best model is already the one you're using.
+
+### 🧠 Smarter with V2
+
+- **It understands the task, not the keywords.** "Find the race condition behind duplicate payments" needs a strong model, even though it says *fix* and *bug*.
+- **It learns from what worked, not from what you clicked.** Retries and escalations to a stronger model teach it; your clicks only decide how often it asks.
+- **It won't make you pay more to save money.** Mid-conversation, a "cheaper" model can cost more because it has to re-read everything. V2 checks your session's real numbers first.
+- **One decision per task.** Accept a model and it stays for the whole task, so follow-up questions don't trigger the popup again.
+- **You can see if it's helping.** One command prints a plain-English report of what it did and how it went.
 
 ### 🛡️ Reliable by design
 
@@ -216,21 +232,122 @@ sequenceDiagram
 | *… (Recommendation only: model routing is off for this session.)* | Installed with `--no-routing`, or the session started before you installed. |
 | *ModelMatch is unavailable right now …* | Something failed behind the scenes. Claude still answers with your model. |
 
+With V2 on, you'll also see:
+
+| Message | What it means |
+| --- | --- |
+| *ModelMatch: Still on Opus 5.5 for this task.* | A follow-up to the same task, so it kept the model you agreed on. No popup. |
+| *ModelMatch: Using Opus 5.5 as you asked.* | You named a model in your prompt ("use opus for this"). Your instruction always wins. |
+| *ModelMatch: staying on Opus 5.5.* | You chose to stay in the two-choice popup. |
+| *ModelMatch: Sonnet 5.5 would likely handle this too (…). Staying on Opus 5.5.* | You've said no a few times in a row, so it mentions the option instead of asking. |
+| *ModelMatch: using Sonnet 5.5 for this task. … (Say "use opus" to switch back.)* | Automatic switch. Only with `MODELMATCH_AUTO_ROUTE=1` and strong evidence. |
+| *ModelMatch couldn't analyse this prompt (…), so … was kept.* | The task analyst was slow or unreachable. Nothing changed. |
+
 The deep dive (proxy endpoints, safety checks, the router API) is in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
 
 ---
 
 ## ModelMatch V2: smarter routing
 
-V2 (`MODELMATCH_ROUTER_V2=1`) replaces the keyword recommender with three systems and one decision engine:
+V1 proved the experience: catch the prompt, suggest a model, ask, switch. But its recommender was
+a list of keywords, it asked on almost every prompt, and it didn't know that switching models
+mid-conversation can cost more than it saves. V2 replaces that brain with three systems that feed
+one decision engine.
 
-1. **A semantic task analyst** (a fast model on the Curvet AI gateway) reads what the task really needs: type, complexity, risk, and the capability tier (light / standard / heavy). "Find the race condition behind duplicate payments" is heavy, even though it says *fix* and *bug*.
-2. **Learning from outcomes, not clicks.** After each prompt, ModelMatch notes what happened: a retry, an escalation to a stronger model, a switch-back, a refusal, or nothing wrong. Your choices are a preference, never ground truth. Picking Opus for tiny edits a hundred times won't teach it "tiny edits need Opus".
-3. **Switch economics.** Each model has its own prompt cache. Mid-conversation, a "cheaper" model often costs more, because it has to re-read everything. V2 measures your session's real token and cache numbers and stays put when switching would cost more.
+> **The idea:** switch automatically when the answer is obvious, ask you when it matters, and
+> otherwise stay out of the way. The popup isn't the product. Knowing *when* a popup is needed is.
 
-The engine then decides whether to **stay silent** (most prompts), **ask** (a real trade-off, e.g. *Stay on Opus 5.5* / *Use Sonnet 5.5 anyway*), or **switch automatically** (only with `MODELMATCH_AUTO_ROUTE=1` and strong evidence). Your explicit "use opus" always wins. A model you accept lasts for the whole task, so follow-ups don't re-ask.
+| System | The question it answers |
+| --- | --- |
+| **1. Semantic task analyst** | What does this task really need? |
+| **2. Learning from outcomes** | What has actually worked for *you* on this kind of task? |
+| **3. Switch economics** | Is switching worth it *in this session*, given what's already cached? |
+| **Decision engine** | Which model, and should it interrupt you at all? |
 
-Full details: [docs/V2-HOW-IT-WORKS.md](docs/V2-HOW-IT-WORKS.md). See how it's going with `.venv/bin/python scripts/modelmatch_report.py`.
+1. **The task analyst.** A small, fast model on the Curvet AI gateway reads the prompt and
+   returns the task type, complexity, risk and the **capability tier** it needs (light /
+   standard / heavy). In Claude Code those tiers map to Haiku 4.5, Sonnet 5.5 and Opus 5.5;
+   Codex and Copilot map them to their own model lists. It answers in about 2 seconds. If it's
+   slow, unreachable or unsure, your model stays.
+2. **Learning from outcomes, not clicks.** When your next prompt arrives, ModelMatch judges the
+   last decision: did you retry, need a stronger model, switch back, hit a refusal, or carry on
+   normally? Those outcomes shape future recommendations, per task type and per model family.
+   Your choices are a preference, never ground truth: picking Opus for tiny edits a hundred times
+   won't teach it "tiny edits need Opus". It only makes it ask you less often.
+3. **Switch economics.** Each model has its own prompt cache. A model that's already warm
+   re-reads the conversation cheaply; a new one has to read all of it at full price. V2 measures
+   your session's real token and cache numbers (never the text) and stays put when switching
+   would cost more. Dollar figures are shown only for API-key billing; subscriptions get plain
+   words, because plan usage isn't billed per token.
+
+**What you see:**
+
+| Situation | What happens |
+| --- | --- |
+| Your current model already fits (most prompts) | Nothing. No popup. |
+| A follow-up on the same task | Nothing. The model you agreed on stays for the whole task. |
+| You name a model ("use opus for this") | It uses that model. Your instruction always wins. |
+| A lighter model clearly fits and saves real money | Popup: *Use Sonnet 5.5* / *Keep Opus 5.5* |
+| A lighter model fits, but your warm session makes switching cost more | Popup: *Stay on Opus 5.5* / *Use Sonnet 5.5 anyway* |
+| The task needs a stronger model | Popup |
+| The analyst is unsure or can't be reached | Nothing. Your model stays. |
+| Strong evidence and `MODELMATCH_AUTO_ROUTE=1` | Switches on its own, with a note saying how to switch back |
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Recommended: Stay on Opus 5.5                      │
+│                                                     │
+│  You normally use Sonnet 5.5 for frontend work,     │
+│  but this Opus 5.5 session already has a large      │
+│  reusable context. Switching now is likely to       │
+│  use more resources.                                │
+│                                                     │
+│   [ Use Sonnet 5.5 anyway ]   [ Stay on Opus 5.5 ]  │
+└─────────────────────────────────────────────────────┘
+```
+
+### Turning V2 on
+
+V2 needs the Curvet task analyst. Add these to `.env` in the `modelmatch` folder:
+
+```bash
+# in .env (never committed)
+MODELMATCH_ROUTER_V2=1
+MODELMATCH_API_URL=https://curvet.in/api/v1/chat/completions
+MODELMATCH_API_KEY=<Curvet App key>
+MODELMATCH_API_SECRET=<Curvet App secret>
+```
+
+Then restart the proxy so it picks up the change (it starts again on its own):
+
+```bash
+python3 hooks/modelmatch_hook.py --stop-proxy
+```
+
+Set `MODELMATCH_ROUTER_V2=0` to go back to V1 at any time. With V2 off, ModelMatch behaves exactly
+as before. V2's other settings are under [V2 settings](#v2-settings).
+
+### V2 in each tool
+
+| | Claude Code | Codex CLI | Copilot CLI |
+| --- | --- | --- | --- |
+| Models | Haiku / Sonnet / Opus (configurable) | Your Codex model list | Your Copilot plan |
+| Learns from outcomes | ✅ | ✅ | ✅ |
+| Measures usage and cache | ✅ input, cache read and write, output | ✅ input, cached input, output | ❌ Copilot's traffic doesn't pass through ModelMatch |
+| Prices | ✅ API list prices | Token counts only | Unknown |
+
+### Is it helping?
+
+```bash
+.venv/bin/python scripts/modelmatch_report.py
+```
+
+A plain-English summary of the last 7 days: how often it stayed quiet, asked or switched, how
+often you accepted, how often a choice led to a retry or an escalation, how fast the analyst was,
+and measured usage per model. It doesn't claim savings until the data supports them.
+
+The full design (outcome signals, the cost formula, task continuity, reason codes) is in
+[docs/V2-HOW-IT-WORKS.md](docs/V2-HOW-IT-WORKS.md).
 
 ---
 
@@ -242,8 +359,9 @@ Full details: [docs/V2-HOW-IT-WORKS.md](docs/V2-HOW-IT-WORKS.md). See how it's g
 | Copilot extension | JavaScript (Copilot CLI extension API) | Your Mac, inside Copilot CLI |
 | Local proxies | FastAPI, uvicorn, httpx (streaming passthrough) | Your Mac, `127.0.0.1:8787` (Claude Code) and `:8788` (Codex) |
 | Use / Keep popup | macOS `osascript` dialog, terminal `[Y/n]` fallback | macOS |
-| Recommendations | Built-in local recommender, or the cloud router (the analyzer website) | Your Mac / Vercel |
-| State | One JSON file, no database | Your Mac |
+| Recommendations | Built-in local recommender (V1), or the Curvet task analyst (`gpt-5.4-mini`, with `claude-haiku-4-5` as a backup) | Your Mac / Curvet AI gateway |
+| V2 decision engine | Python: task analyst, outcome learning, cache economics, task continuity | Your Mac, inside the local proxy |
+| State | A JSON file for sessions, plus SQLite for V2's learning (metadata only) | Your Mac |
 | Tests and CI | pytest, GitHub Actions (macOS + Linux) | GitHub |
 
 ---
@@ -264,12 +382,27 @@ Full details: [docs/V2-HOW-IT-WORKS.md](docs/V2-HOW-IT-WORKS.md). See how it's g
 │   ├── provider.py                Model catalog and provider adapters
 │   ├── session_store.py           Per-session state (state/sessions.json)
 │   ├── config.py                  Settings from .env
-│   └── agents/                    The second local proxy, for Codex and Copilot (port 8788)
+│   ├── agents/                    The second local proxy, for Codex and Copilot (port 8788)
+│   └── v2/                        The V2 routing brain, shared by both proxies
+│       ├── analyzer.py            Semantic task analyst (Curvet), with fail-open handling
+│       ├── engine.py              Decision engine: silent, ask, or switch
+│       ├── outcomes.py            Judges each decision when the next prompt arrives
+│       ├── profiles.py            What has worked for you, per task type and model family
+│       ├── cache.py, economics.py Measured usage and the stay-vs-switch cost
+│       ├── pricing.py             Model prices (override with MODELMATCH_PRICING_FILE)
+│       ├── continuity.py          Keeps one model for one task (no flapping)
+│       ├── explain.py             Turns reason codes into the short popup text
+│       ├── store.py, metrics.py   The learning database and the numbers behind the report
+│       └── service.py             Connects it all to the proxy endpoints
 ├── scripts/                       install, uninstall, doctor (also *_codex.sh and *_copilot.sh), pause, resume, package
-├── tests/                         Automated tests (pytest)
+│   └── modelmatch_report.py       Plain-English report of what V2 has been doing
+├── tests/                         Automated tests (pytest), including test_v2_*.py
 ├── docs/HOW-IT-WORKS.md           Technical deep dive (Claude Code)
+├── docs/V2-HOW-IT-WORKS.md        How V2 decides: analyst, outcomes, cache economics
 ├── docs/CODEX-COPILOT-GUIDE.md    Install and use it with Codex and Copilot
 ├── docs/CODEX-COPILOT-PLAN.md     How the Codex and Copilot versions were designed
+├── reports/                       Research reports that shaped V2
+├── research_notes/                The research notes behind those reports
 ├── .github/workflows/ci.yml       Runs the tests on every push
 ├── .env.example                   Settings template (copied to .env, which is never committed)
 └── requirements.txt               Python packages for the proxy
@@ -402,7 +535,7 @@ The full guide is [docs/CODEX-COPILOT-GUIDE.md](docs/CODEX-COPILOT-GUIDE.md).
 | `~/.claude/settings.json` | The two hooks + `ANTHROPIC_BASE_URL` when installed with `--global` | ❌ No (your Mac) |
 | `<project>/.claude/settings.json` | The two hooks for a one-folder install | ❌ No |
 | `<project>/.claude/settings.local.json` | `ANTHROPIC_BASE_URL` for a one-folder install | ❌ No |
-| `logs/`, `state/` | Logs and per-session state | ❌ No |
+| `logs/`, `state/` | Logs, per-session state and V2's learning database (`state/*.db`) | ❌ No |
 
 ### Settings (`.env`)
 
@@ -425,6 +558,25 @@ The full guide is [docs/CODEX-COPILOT-GUIDE.md](docs/CODEX-COPILOT-GUIDE.md).
 The hook rereads `.env` on every prompt. After changing router settings, restart the proxy with
 `python3 hooks/modelmatch_hook.py --stop-proxy` (it starts again on its own).
 
+### V2 settings
+
+These only matter with `MODELMATCH_ROUTER_V2=1`.
+
+| Setting | Default | Controls |
+| --- | :-: | --- |
+| `MODELMATCH_PERSONALIZATION` | 1 | Learn from your outcomes. `0` uses the task analyst alone. |
+| `MODELMATCH_CACHE_AWARE` | 1 | Check whether staying is cheaper than switching. |
+| `MODELMATCH_AUTO_ROUTE` | 0 | `1` lets it switch without asking when the evidence is strong. |
+| `MODELMATCH_ROUTER_MODEL` | `gpt-5.4-mini` | The Curvet model that analyses each prompt |
+| `MODELMATCH_ROUTER_FALLBACK_MODEL` | `claude-haiku-4-5-20251001` | A backup, started if the first answer takes more than 3 s |
+| `MODELMATCH_DENIED_MODELS` | *empty* | Comma-separated models or families it must never switch to |
+| `MODELMATCH_ALLOWED_MODELS` | *empty* | If set, the only models it may switch to |
+| `MODELMATCH_CLAUDE_LIGHT_MODEL` | `claude-haiku-4-5` | The Claude model for light tasks |
+| `MODELMATCH_CLAUDE_STANDARD_MODEL` | `claude-sonnet-5-5` | The Claude model for standard tasks |
+| `MODELMATCH_CLAUDE_HEAVY_MODEL` | `claude-opus-5-5` | The Claude model for heavy tasks |
+| `MODELMATCH_PRICING_FILE` | *built in* | A JSON file with your own model prices |
+| `MODELMATCH_DB_FILE` | `state/modelmatch.db` | V2's memory for Claude Code (`MODELMATCH_AGENTS_DB_FILE` for Codex and Copilot) |
+
 ---
 
 ## Commands
@@ -442,6 +594,7 @@ Run these from the `modelmatch` folder.
 | `python3 hooks/modelmatch_hook.py --status` | Is the local proxy running? (`--start-proxy` / `--stop-proxy`) |
 | `bash scripts/package.sh` | Build a shareable zip in `dist/` |
 | `.venv/bin/python scripts/modelmatch_report.py` | What V2 has been doing: popups, accepts, retries, escalations, measured usage |
+| `curl -s http://127.0.0.1:8787/v2/metrics` | The same V2 numbers as raw JSON |
 | `.venv/bin/python -m pytest` | Run the tests |
 
 After install, update or uninstall, **restart Claude Code**.
@@ -520,7 +673,7 @@ personal path.
 ## Testing
 
 ```bash
-.venv/bin/python -m pytest        # everything, ~25 s, no network or popups needed
+.venv/bin/python -m pytest        # 310 tests, about a minute, no network or popups needed
 bash scripts/doctor.sh --tests    # health check + tests
 ```
 
@@ -539,7 +692,8 @@ every push and pull request.
 
 > [!NOTE]
 > Automated tests use a stand-in for the macOS popup, since a robot can't click it. To see the
-> real popup, install it and type a prompt.
+> real popup, install it and type a prompt. The tests also ignore your own `.env`, so they give the
+> same result whether or not you've turned V2 on.
 
 ---
 
@@ -605,9 +759,42 @@ Run `xcode-select --install`, click **Install**, wait for it to finish, then ins
 
 <br>
 
-Something else (a company gateway, for example) already routes Claude Code's traffic. Workflow
-Copilot won't override it, so you get suggestions only. See
+Something else (a company gateway, for example) already routes Claude Code's traffic. ModelMatch
+won't override it, so you get suggestions only. See
 [install scopes](docs/HOW-IT-WORKS.md#install-scopes) to chain the two.
+</details>
+
+<details>
+<summary><b>I turned V2 on and hardly ever see the popup.</b></summary>
+
+<br>
+
+That's V2 working as intended. It stays quiet when your model already fits, on follow-ups to the
+same task, and when switching would cost more than staying. Run
+`.venv/bin/python scripts/modelmatch_report.py` to see how often it stayed quiet and why. If you
+never see it, check that `MODELMATCH_ROUTER_V2=1` and the Curvet key and secret are in `.env`,
+then restart the proxy with `python3 hooks/modelmatch_hook.py --stop-proxy`.
+</details>
+
+<details>
+<summary><b>Why does it say "Stay on Opus" when a cheaper model would do?</b></summary>
+
+<br>
+
+Your session has built up a lot of context, and Opus already has it cached. A different model
+would have to read all of it again at full price, which usually costs more than finishing the task
+on Opus. If you still want to switch, click **Use … anyway**. Starting a fresh session (or `/clear`)
+resets this.
+</details>
+
+<details>
+<summary><b>It keeps suggesting a model I don't want.</b></summary>
+
+<br>
+
+Say no a few times in a row and V2 turns the popup into a one-line note, asking again only now and
+then. To rule a model out completely, add it to `MODELMATCH_DENIED_MODELS` in `.env` (for example
+`MODELMATCH_DENIED_MODELS=haiku`). Codex and Copilot need the exact model id instead.
 </details>
 
 <details>
@@ -637,13 +824,25 @@ Never your prompt text, passwords or keys.
 - macOS only (the popup is a macOS window).
 - Claude Code switches between **Claude models** only, and needs to be signed in directly with Anthropic (not Bedrock, Vertex or Foundry). Codex and Copilot switch within your Codex list and Copilot plan.
 - Codex runs only hooks you trust (`/hooks`). Copilot's extension feature is still labelled experimental by GitHub.
-- The built-in recommender is simple, so you'll see a suggestion on most prompts. V2 with the Curvet analyst stays quiet when your model already fits, but adds about 2 seconds per prompt.
+- The built-in recommender (V1) is simple, so you'll see a suggestion on most prompts. V2 with the Curvet analyst stays quiet when your model already fits, but adds about 2 seconds per prompt and needs your own Curvet key.
+- V2 learns from behaviour (retries, escalations, switch-backs, refusals), not from whether the code actually worked. It doesn't yet check if tests passed.
+- Copilot's usage, cache and prices can't be measured, so V2's Copilot decisions rely on the task and your history only.
+- Subscription usage is described in words, not numbers, because Anthropic doesn't publish how cache reads count against plan limits.
 
-**Next**
+**Done**
 
 - [x] Real semantic recommendations (V2, Curvet task analyst)
 - [x] Quieter suggestions (no popup when your model already fits)
+- [x] Learning from outcomes, per task type and model family
+- [x] Cache-aware switching (stays when switching would cost more)
+- [x] One model per task, so follow-ups don't re-ask
+- [x] V2 in Codex and Copilot as well as Claude Code
+- [x] A plain-English report of what V2 has been doing
+
+**Next**
+
 - [ ] `/api/route` on the analyzer website, so other installs don't need their own Curvet keys
+- [ ] Use test results as an outcome signal, not just retries and escalations
 - [ ] Provider adapters (OpenRouter and others), so Claude Code can run non-Claude recommendations too
 
 ---
