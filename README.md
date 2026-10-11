@@ -20,6 +20,7 @@
 - [Works with Claude Code, Codex and Copilot](#works-with-claude-code-codex-and-copilot)
 - [What it solves](#what-it-solves)
 - [How it works under the hood](#how-it-works-under-the-hood)
+- [ModelMatch V2: smarter routing](#modelmatch-v2-smarter-routing)
 - [Tech stack](#tech-stack)
 - [Repository layout](#repository-layout)
 - [Getting started](#getting-started)
@@ -137,12 +138,13 @@ set of settings, and they can be installed side by side.
 ### 🔐 Private by default
 
 - **Your Claude sign-in passes straight through** to Anthropic. It's never stored or logged.
-- **Your prompts stay on your Mac** with the built-in recommender. Logs keep only a prompt's length, never its text.
+- **Your prompts stay on your Mac** with the built-in recommender. With the Curvet task analyst, each prompt (at most 8,000 characters, with obvious keys and passwords redacted) is sent to Curvet once to be classified. Logs and V2's database keep only metadata, never the text.
 - **Your settings are safe.** Every change is backed up first, and only ModelMatch's own entries are ever touched.
 
 ### 💸 Costs nothing to run
 
 - Everything runs **locally on your Mac**: no server, no account, no subscription. Your Claude usage is billed exactly as today. Choosing a lighter model for simple prompts can even reduce it.
+- With the **Curvet task analyst** switched on, each prompt makes one small call to a cheap model on your Curvet account (about 1,000 tokens in, 150 out).
 
 ### 🔌 Built to grow
 
@@ -215,6 +217,20 @@ sequenceDiagram
 | *ModelMatch is unavailable right now …* | Something failed behind the scenes. Claude still answers with your model. |
 
 The deep dive (proxy endpoints, safety checks, the router API) is in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
+
+---
+
+## ModelMatch V2: smarter routing
+
+V2 (`MODELMATCH_ROUTER_V2=1`) replaces the keyword recommender with three systems and one decision engine:
+
+1. **A semantic task analyst** (a fast model on the Curvet AI gateway) reads what the task really needs: type, complexity, risk, and the capability tier (light / standard / heavy). "Find the race condition behind duplicate payments" is heavy, even though it says *fix* and *bug*.
+2. **Learning from outcomes, not clicks.** After each prompt, ModelMatch notes what happened: a retry, an escalation to a stronger model, a switch-back, a refusal, or nothing wrong. Your choices are a preference, never ground truth. Picking Opus for tiny edits a hundred times won't teach it "tiny edits need Opus".
+3. **Switch economics.** Each model has its own prompt cache. Mid-conversation, a "cheaper" model often costs more, because it has to re-read everything. V2 measures your session's real token and cache numbers and stays put when switching would cost more.
+
+The engine then decides whether to **stay silent** (most prompts), **ask** (a real trade-off, e.g. *Stay on Opus 5.5* / *Use Sonnet 5.5 anyway*), or **switch automatically** (only with `MODELMATCH_AUTO_ROUTE=1` and strong evidence). Your explicit "use opus" always wins. A model you accept lasts for the whole task, so follow-ups don't re-ask.
+
+Full details: [docs/V2-HOW-IT-WORKS.md](docs/V2-HOW-IT-WORKS.md). See how it's going with `.venv/bin/python scripts/modelmatch_report.py`.
 
 ---
 
@@ -392,9 +408,12 @@ The full guide is [docs/CODEX-COPILOT-GUIDE.md](docs/CODEX-COPILOT-GUIDE.md).
 
 | Setting | Default | Controls |
 | --- | :-: | --- |
-| `MODELMATCH_API_URL` | *empty* | Where recommendations come from. Empty means the built-in recommender. |
-| `MODELMATCH_API_KEY` | | Key for the cloud router |
-| `MODELMATCH_API_TIMEOUT` | 25 | Seconds to wait for a recommendation |
+| `MODELMATCH_API_URL` | *empty* | Where recommendations come from. Empty means the built-in recommender. `https://curvet.in/api/v1/chat/completions` = the Curvet task analyst. |
+| `MODELMATCH_API_KEY` | | Key for the cloud router (Curvet: your App key) |
+| `MODELMATCH_API_SECRET` | | Curvet App secret |
+| `MODELMATCH_API_TIMEOUT` | 6 (Curvet) / 25 | Seconds to wait for a recommendation |
+| `MODELMATCH_ROUTER_V2` | 0 | `1` turns on V2 (see [ModelMatch V2](#modelmatch-v2-smarter-routing)) |
+| `MODELMATCH_AUTO_ROUTE` | 0 | `1` lets V2 switch without asking when the evidence is strong |
 | `MODELMATCH_CONFIRM_UI` | `auto` | `auto` (popup), `dialog`, `tty`, `auto-accept`, `never` |
 | `MODELMATCH_CONFIRM_TIMEOUT` | 30 | Seconds before an unanswered popup keeps your model |
 | `MODELMATCH_DISABLED` | 0 | `1` pauses it (use `pause.sh` / `resume.sh`) |
@@ -422,6 +441,7 @@ Run these from the `modelmatch` folder.
 | `bash scripts/uninstall.sh --global` | Remove it (`--purge` also deletes `.venv`, `logs`, `state`) |
 | `python3 hooks/modelmatch_hook.py --status` | Is the local proxy running? (`--start-proxy` / `--stop-proxy`) |
 | `bash scripts/package.sh` | Build a shareable zip in `dist/` |
+| `.venv/bin/python scripts/modelmatch_report.py` | What V2 has been doing: popups, accepts, retries, escalations, measured usage |
 | `.venv/bin/python -m pytest` | Run the tests |
 
 After install, update or uninstall, **restart Claude Code**.
@@ -430,9 +450,19 @@ After install, update or uninstall, **restart Claude Code**.
 
 ## Connecting the cloud router
 
-Recommendations currently come from a **built-in local recommender** (simple rules: short
-questions → Haiku, coding → Sonnet, big design work → Opus). The real cloud router
-plugs in with one setting.
+**Live now: the Curvet task analyst.** The local proxy calls the Curvet AI gateway directly,
+with your App key and secret from `.env`:
+
+```bash
+# in .env (never committed)
+MODELMATCH_API_URL=https://curvet.in/api/v1/chat/completions
+MODELMATCH_API_KEY=<Curvet App key>
+MODELMATCH_API_SECRET=<Curvet App secret>
+```
+
+Without it, recommendations come from the **built-in local recommender** (simple rules: short
+questions → Haiku, coding → Sonnet, big design work → Opus), which is kept for offline use and
+tests. A hosted router on the website can still replace the direct Curvet call later:
 
 | Endpoint on the website | Status |
 | --- | --- |
@@ -473,7 +503,8 @@ personal path.
 | Area | Protection |
 | --- | --- |
 | **Your Claude sign-in** | Passed straight through to Anthropic. Never stored, never logged. |
-| **Your prompts** | With the built-in recommender they never leave your Mac. A cloud router receives at most the first 8,000 characters, once per prompt. Logs record only length and a fingerprint. |
+| **Your prompts** | With the built-in recommender they never leave your Mac. A cloud router (Curvet) receives at most 8,000 characters, once per prompt, with obvious keys, tokens and passwords redacted first. Logs record only length and a fingerprint. |
+| **V2's learning data** | `state/*.db` (mode 600) holds only metadata: task type, models, choices, outcomes, token counts. Never prompt text, headers or keys. |
 | **Your settings** | Backed up before every change. Only ModelMatch's own entries are touched. Invalid settings files and other gateways' `ANTHROPIC_BASE_URL` are never overwritten. |
 | **Prompts are never blocked** | The hook always lets Claude continue, and its command ends in `\|\| true` so even a deleted hook file can't block a prompt. |
 | **Model switching** | Only to models your tool can really run (Claude in Claude Code, your Codex list, your Copilot plan). A model it can't run is shown as advice, never faked. |
@@ -500,6 +531,8 @@ bash scripts/doctor.sh --tests    # health check + tests
 | [`test_router_client.py`](tests/test_router_client.py) | Built-in recommender, the `/api/route` contract, the `/api/analyze` adapter, timeouts and malformed replies |
 | [`test_provider.py`](tests/test_provider.py) | Model names (current, retired, unknown), non-Claude providers, per-model request adjustments |
 | [`test_settings_tool.py`](tests/test_settings_tool.py) | Global and folder installs: merging, backups, never overwriting invalid files or another gateway |
+| `test_v2_*.py` | V2: task analyst failures and hedging, decision engine cases, outcome learning, cache economics, task continuity, the two-choice popup, Codex and Copilot |
+| [`test_v2_semantic_live.py`](tests/test_v2_semantic_live.py) | Opt-in (`MODELMATCH_LIVE_TESTS=1`): the real Curvet analyst on example prompts |
 
 GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) runs the full suite on macOS and Linux on
 every push and pull request.
@@ -604,12 +637,13 @@ Never your prompt text, passwords or keys.
 - macOS only (the popup is a macOS window).
 - Claude Code switches between **Claude models** only, and needs to be signed in directly with Anthropic (not Bedrock, Vertex or Foundry). Codex and Copilot switch within your Codex list and Copilot plan.
 - Codex runs only hooks you trust (`/hooks`). Copilot's extension feature is still labelled experimental by GitHub.
-- The built-in recommender is simple, so you'll see a suggestion on most prompts.
+- The built-in recommender is simple, so you'll see a suggestion on most prompts. V2 with the Curvet analyst stays quiet when your model already fits, but adds about 2 seconds per prompt.
 
 **Next**
 
-- [ ] `/api/route` on the analyzer website, for real recommendations
-- [ ] Quieter suggestions once the real router is live (no popup when your model already fits)
+- [x] Real semantic recommendations (V2, Curvet task analyst)
+- [x] Quieter suggestions (no popup when your model already fits)
+- [ ] `/api/route` on the analyzer website, so other installs don't need their own Curvet keys
 - [ ] Provider adapters (OpenRouter and others), so Claude Code can run non-Claude recommendations too
 
 ---
@@ -619,6 +653,7 @@ Never your prompt text, passwords or keys.
 | Document | Read it when you want to... |
 | --- | --- |
 | [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) | Understand the proxy endpoints, install safety checks, router API and known limits |
+| [docs/V2-HOW-IT-WORKS.md](docs/V2-HOW-IT-WORKS.md) | Understand V2: the task analyst, outcome learning, cache economics and when it asks |
 | [docs/CODEX-COPILOT-GUIDE.md](docs/CODEX-COPILOT-GUIDE.md) | Install and use ModelMatch with Codex CLI and GitHub Copilot CLI |
 | [docs/CODEX-COPILOT-PLAN.md](docs/CODEX-COPILOT-PLAN.md) | See how the Codex and Copilot versions were researched and designed |
 | [.env.example](.env.example) | See every setting |

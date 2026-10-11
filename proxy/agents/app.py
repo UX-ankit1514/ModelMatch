@@ -9,6 +9,7 @@ Endpoints
     GET  /session/{client}/{id}  inspect a session's state (debugging)
     POST /recommend              ONE recommendation for a prompt, matched to the tool's own models
     POST /selection              record accept/reject for that recommendation
+    GET  /v2/metrics             V2 only: popup / accept / regret rates, router latency, measured usage
     *    /v1/{anything}          Codex only: passthrough to Codex's model API (openai_base_url target)
 
 Copilot switches models itself (its extension calls Copilot's own model switch), so
@@ -17,6 +18,11 @@ unless the session accepted a recommendation for the *current turn*; then that
 turn's requests use the recommended model. If the upstream rejects a routed request,
 it is retried once, unchanged. WebSocket upgrades are refused with 426 so Codex uses
 HTTPS straight away (the model can only be swapped in requests the proxy can read).
+
+With MODELMATCH_ROUTER_V2=1, /recommend and /selection are answered by the V2 decision
+engine (proxy/v2/), matched to each tool's own model list, and Codex's usage numbers
+are recorded from its responses. Copilot's traffic never passes through here, so its
+usage and cache are unknown and ModelMatch says so instead of guessing.
 """
 
 import hashlib
@@ -39,6 +45,8 @@ from .. import __version__
 from ..app import HOP_BY_HOP, RETRY_WITH_ORIGINAL
 from ..router_client import RouterError
 from ..session_store import SessionStore
+from ..v2.adapters import ListAdapter
+from ..v2.cache import UsageTap, billing_mode, rate_limits
 from .catalog import ModelInfo, codex_models, detect_tiers, find_model, mock_tier, resolve, with_pinned
 from .codex_config import model_list_file, read_config
 from .config import CLIENTS, AgentSettings, get_agent_settings
@@ -114,6 +122,8 @@ class RecommendRequest(BaseModel):
     cwd: Optional[str] = None
     current_model: Optional[str] = None
     available_models: Optional[List[AvailableModel]] = None
+    routing: Optional[bool] = None  # V2 hooks: can this tool's model be switched right now?
+    client_version: Optional[int] = None
 
 
 class SelectionRequest(BaseModel):
@@ -122,6 +132,7 @@ class SelectionRequest(BaseModel):
     recommendation_id: str
     accepted: bool
     decided_by: str = "user"
+    choice: Optional[str] = None  # V2: the option picked ("keep" or a model id)
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +151,11 @@ def create_app(settings: Optional[AgentSettings] = None,
     started_at = time.time()
     seen = {"logged_header_names": False, "warned_ws": False, "warned_compressed": False}
     codex_cache: Dict[str, object] = {"key": None, "models": [], "path": None}
+    v2 = None
+    adapters: Dict[str, ListAdapter] = {}  # V2: the model list each session's last prompt was matched against
+    if base.v2:
+        from ..v2.service import V2Service  # only loaded when V2 is switched on
+        v2 = V2Service(base, store, log, transport=router_transport)
 
     def codex_catalog() -> Tuple[List[ModelInfo], object]:
         """Codex's model list, re-read whenever Codex updates the file."""
@@ -200,6 +216,7 @@ def create_app(settings: Optional[AgentSettings] = None,
             "service": SERVICE_NAME,
             "version": __version__,
             "router": base.router_mode,
+            "v2": bool(v2),
             "codex_upstream": settings.codex_upstream_url or "auto",
             "zstd": zstd_available(),
             "sessions": store.count(),
@@ -231,6 +248,8 @@ def create_app(settings: Optional[AgentSettings] = None,
                 store.note_seen_model(key, req.model)
         else:
             store.start_session(key, req.cwd, req.source, req.model)
+            if v2 is not None:
+                v2.session_started(req.client, req.session_id, req.source)
         log.info("session start | %s | session=%s | source=%s | model=%s", req.client, short(req.session_id),
                  req.source or "-", req.model or "-")
         return {"ok": True, "session_id": req.session_id, "router": base.router_mode}
@@ -251,6 +270,23 @@ def create_app(settings: Optional[AgentSettings] = None,
         if not prompt.strip():
             return JSONResponse(status_code=400, content={"ok": False, "error": "empty prompt"})
         key = store_key(req.client, req.session_id)
+        if v2 is not None:
+            try:
+                current = req.current_model or store.current_model(key)
+                listed = models_for(req.client, req)
+                tiers = detect_tiers(listed, current, settings.tier_overrides.get(req.client))
+                adapter = ListAdapter(req.client, with_pinned(listed, tiers), tiers,
+                                      measures_cache=req.client == "codex", denied=base.denied_models,
+                                      allowed=base.allowed_models)
+                adapters[key] = adapter
+                return await v2.recommend(client=req.client, session_id=req.session_id, store_key=key,
+                                          prompt=prompt, turn_id=req.turn_id, cwd=req.cwd, current_model=current,
+                                          adapter=adapter, routing_enabled=req.routing)
+            except Exception as exc:  # fail open: the hook keeps the current model
+                log.exception("v2 recommend crashed | %s | session=%s | fallback: keep current model", req.client,
+                              short(req.session_id))
+                return JSONResponse(status_code=502, content={"ok": False, "error": "router error: " +
+                                                              type(exc).__name__})
         fp = fingerprint(prompt)
         store.new_turn(key, req.turn_id, fp)
         if req.current_model:
@@ -273,7 +309,7 @@ def create_app(settings: Optional[AgentSettings] = None,
         listed = models_for(req.client, req)
         tiers = detect_tiers(listed, current, settings.tier_overrides.get(req.client))
         listed = with_pinned(listed, tiers)
-        size = mock_tier(result.recommended_model) if result.source == "mock" else None
+        size = result.tier or (mock_tier(result.recommended_model) if result.source == "mock" else None)
         match = resolve(result.recommended_model, listed, tiers, size, WHERE[req.client])
         recommendation = {
             "recommended_model": match.display,
@@ -300,8 +336,15 @@ def create_app(settings: Optional[AgentSettings] = None,
         problem = bad_client(req.client)
         if problem:
             return problem
-        result = store.set_selection(store_key(req.client, req.session_id), req.recommendation_id, req.accepted,
-                                     req.decided_by)
+        key = store_key(req.client, req.session_id)
+        if v2 is not None and key in adapters:
+            result = v2.select(client=req.client, session_id=req.session_id, store_key=key,
+                               recommendation_id=req.recommendation_id, accepted=req.accepted,
+                               decided_by=req.decided_by, choice=req.choice, adapter=adapters[key])
+            if not result.get("ok"):
+                return JSONResponse(status_code=409, content=result)
+            return result
+        result = store.set_selection(key, req.recommendation_id, req.accepted, req.decided_by)
         if not result.get("ok"):
             log.warning("selection ignored | %s | session=%s | %s", req.client, short(req.session_id),
                         result.get("error"))
@@ -310,6 +353,13 @@ def create_app(settings: Optional[AgentSettings] = None,
                  "accepted" if req.accepted else "rejected", req.client, short(req.session_id), req.decided_by,
                  result["applied"], " -> " + result["active_model"] if result["applied"] else " (keep original model)")
         return result
+
+    @app.get("/v2/metrics")
+    async def v2_metrics(days: float = 7.0, client: Optional[str] = None):
+        if v2 is None:
+            return JSONResponse(status_code=404, content={"ok": False, "error": "V2 is off (MODELMATCH_ROUTER_V2)"})
+        from ..v2.metrics import summarize
+        return {"ok": True, **summarize(v2.db, days, client)}
 
     # -- Codex model API passthrough ---------------------------------------------
 
@@ -351,6 +401,7 @@ def create_app(settings: Optional[AgentSettings] = None,
         headers = [(k, v) for k, v in headers if k.lower() != "accept-encoding"] + [("accept-encoding", "gzip, deflate")]
 
         routed: Optional[Tuple[str, str, str]] = None  # (session_id, original, target)
+        measure: Optional[Tuple[str, str]] = None  # V2: (session_id, original model) of a turn request
         send_body, send_headers = body, headers
         if request.method == "POST" and path.rstrip("/") == "responses" and body:
             encoding = request.headers.get("content-encoding", "")
@@ -374,6 +425,8 @@ def create_app(settings: Optional[AgentSettings] = None,
                              sorted({k.lower() for k, _ in headers}), "found" if session_id else "NOT FOUND",
                              encoding or "none")
                 if session_id and kind in (None, "turn"):
+                    if v2 is not None and isinstance(original, str):
+                        measure = (session_id, original)
                     if isinstance(original, str):
                         store.note_seen_model(store_key("codex", session_id), original)
                     target = route_for(session_id, turn_id, original)
@@ -385,6 +438,7 @@ def create_app(settings: Optional[AgentSettings] = None,
                         log.info("routing | codex | session=%s | turn=%s | %s -> %s", short(session_id),
                                  short(turn_id), original, target)
 
+        sent_at = time.monotonic()
         try:
             response = await send_upstream(request, url, send_headers, send_body)
             if routed and response.status_code in RETRY_WITH_ORIGINAL:
@@ -395,6 +449,8 @@ def create_app(settings: Optional[AgentSettings] = None,
                             short(session_id), target, response.status_code, " ".join(detail.split()), original)
                 store.mark_route_failed(store_key("codex", session_id),
                                         "HTTP {} for {}".format(response.status_code, target))
+                if v2 is not None:
+                    v2.note_route_failed("codex", session_id)
                 routed = None
                 response = await send_upstream(request, url, headers, body)
         except httpx.HTTPError as exc:
@@ -407,7 +463,25 @@ def create_app(settings: Optional[AgentSettings] = None,
         response_headers = {k: v for k, v in response.headers.items() if k.lower() not in HOP_BY_HOP}
         if routed:
             response_headers["x-modelmatch-routed-model"] = routed[2]
-        return StreamingResponse(response.aiter_raw(), status_code=response.status_code, headers=response_headers,
+        content = response.aiter_raw()
+        if measure is not None:
+            content = measured(content, request, response, measure, routed, sent_at)
+        return StreamingResponse(content, status_code=response.status_code, headers=response_headers,
                                  background=BackgroundTask(response.aclose))
+
+    def measured(content, request: Request, response, measure, routed, sent_at: float):
+        """V2: read Codex's usage numbers from a copy of the stream (the bytes pass through unchanged)."""
+        session_id, original = measure
+        billing, limits, status = billing_mode(request.headers), rate_limits(response.headers), response.status_code
+
+        def done(usage):
+            v2.on_usage(client="codex", session_id=session_id, original_model=original,
+                        sent_model=routed[2] if routed else original, routed=bool(routed), status=status, usage=usage,
+                        requested_ttl=None, billing=billing, request_class=None,
+                        latency_ms=int((time.monotonic() - sent_at) * 1000), limits=limits)
+
+        tap = UsageTap("responses", response.headers.get("content-encoding", ""),
+                       response.headers.get("content-type", ""), done)
+        return tap.wrap(content)
 
     return app

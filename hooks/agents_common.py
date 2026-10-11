@@ -254,6 +254,15 @@ def confirm(cfg, rec):
     return base.confirm(cfg, rec)
 
 
+def run_v2_decision(cfg, log, client, session_id, rec):
+    """ModelMatch V2 (MODELMATCH_ROUTER_V2=1): the proxy decides whether to ask at all.
+
+    Same two-choice question as the Claude Code hook. Returns {"message", "model_id",
+    "model_name"}: the model that should run now (None = the tool's own model).
+    """
+    return base.run_v2_decision(cfg, session_id, rec, extra={"client": client}, logger=log)
+
+
 def register_session(cfg, log, client, session_id, cwd, source, model):
     try:
         status, _ = http_json("POST", cfg.proxy_url + "/session/start",

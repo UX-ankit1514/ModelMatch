@@ -58,6 +58,22 @@ def keep(message=None):
 # ---------------------------------------------------------------------------
 
 
+def v2_answer(cfg, log, session_id, rec, current):
+    """ModelMatch V2: Copilot switches its own model, so the extension is told what to run.
+
+    Copilot puts your model back after each answer, so a model chosen for a task is
+    applied again (without a question) for that task's follow-up prompts.
+    """
+    outcome = common.run_v2_decision(cfg, log, CLIENT, session_id, rec)
+    target = outcome.get("model_id")
+    if target and (current or "").lower() != target.lower():
+        name = outcome.get("model_name") or target
+        return {"action": SWITCH, "model_id": target, "model_name": name,
+                "message": outcome.get("message") or "ModelMatch: using {} for this task.".format(name)}
+    return keep(outcome.get("message"))
+
+
+
 def session_start(cfg, log, data):
     session_id = data.get("session_id") or ""
     source = data.get("source") or "-"
@@ -104,10 +120,13 @@ def decide(cfg, log, data):
 
     rec, error = common.get_recommendation(cfg, log, {
         "client": CLIENT, "session_id": session_id, "prompt": prompt, "cwd": data.get("cwd"),
-        "current_model": current, "available_models": data.get("available_models") or []})
+        "current_model": current, "available_models": data.get("available_models") or [],
+        "routing": bool(data.get("can_switch", True)), "client_version": 2})
     if rec is None:
         return keep("ModelMatch couldn't get a recommendation ({}). Continuing with your current model.".format(
             error))
+    if isinstance(rec.get("v2"), dict):
+        return v2_answer(cfg, log, session_id, rec, current)
 
     name = rec["recommended_model"]
     reason = rec.get("recommendation_reason") or ""

@@ -22,8 +22,8 @@ find "$STAGE" \( -name '*.pyc' -o -name .DS_Store -o -name '*.bak-*' \) -delete
 # Safety scan: refuse to build if anything private slipped in.
 BAD=""
 if find "$STAGE" \( -name .env -o -name .venv -o -name logs -o -name state -o -name .claude -o -name dist \) | grep -q .; then BAD="private folders/files present"; fi
-if grep -rIl --exclude=package.sh -E "/Users/[A-Za-z0-9._-]+|sk-ant-[A-Za-z0-9_-]{20,}|@arnifi" "$STAGE" >/dev/null 2>&1; then BAD="personal path, email or key found"; fi
-if [ -n "$BAD" ]; then echo "STOP: $BAD. Zip NOT created."; grep -rIl --exclude=package.sh -E "/Users/[A-Za-z0-9._-]+|sk-ant-[A-Za-z0-9_-]{20,}|@arnifi" "$STAGE" || true; exit 1; fi
+if grep -rIl --exclude=package.sh -E "/Users/[A-Za-z0-9._-]+|sk-ant-[A-Za-z0-9_-]{20,}|app_[0-9a-f]{20}|[0-9a-f]{64}|@arnifi" "$STAGE" >/dev/null 2>&1; then BAD="personal path, email or key found"; fi
+if [ -n "$BAD" ]; then echo "STOP: $BAD. Zip NOT created."; grep -rIl --exclude=package.sh -E "/Users/[A-Za-z0-9._-]+|sk-ant-[A-Za-z0-9_-]{20,}|app_[0-9a-f]{20}|[0-9a-f]{64}|@arnifi" "$STAGE" || true; exit 1; fi
 
 rm -f "$OUT"
 (cd "$STAGE" && zip -qr "$OUT" "$NAME")

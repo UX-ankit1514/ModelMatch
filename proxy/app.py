@@ -9,11 +9,17 @@ Endpoints
     POST /recommend         ONE model recommendation for a prompt (called by UserPromptSubmit)
     POST /selection         record accept/reject for that recommendation
     POST /mock/api/route    local mock of the planned cloud contract
+    GET  /v2/metrics        V2 only: popup / accept / regret rates, router latency, measured usage
+    GET  /v2/decision/{id}  V2 only: one recorded decision (metadata only, never the prompt)
     *    /{anything else}   transparent passthrough to the Anthropic API (ANTHROPIC_BASE_URL target)
 
 Fail-open rules for the passthrough: requests are forwarded untouched unless the
 session has an accepted, routable recommendation for the current human turn. If
 the upstream rejects a routed request, it is retried once with the original model.
+
+With MODELMATCH_ROUTER_V2=1, /recommend and /selection are answered by the V2
+decision engine (proxy/v2/), and the usage numbers of each response are recorded
+(the stream itself is passed through unchanged).
 """
 
 import hashlib
@@ -38,6 +44,8 @@ from .config import Settings, get_settings
 from .provider import adapter_for, is_small_fast_model, resolve_model, same_model
 from .router_client import MockRouter, RouterError, build_router
 from .session_store import SessionStore
+from .v2.adapters import ClaudeCodeAdapter
+from .v2.cache import UsageTap, billing_mode, rate_limits, requested_ttl
 
 LOGGER_NAME = "modelmatch.proxy"
 HOP_BY_HOP = {
@@ -157,6 +165,8 @@ class RecommendRequest(BaseModel):
     prompt: str
     prompt_id: Optional[str] = None
     cwd: Optional[str] = None
+    routing: Optional[bool] = None  # V2 hooks say whether this session's traffic passes through the proxy
+    client_version: Optional[int] = None
 
 
 class SelectionRequest(BaseModel):
@@ -164,6 +174,7 @@ class SelectionRequest(BaseModel):
     recommendation_id: str
     accepted: bool
     decided_by: str = "user"
+    choice: Optional[str] = None  # V2: the option picked ("keep" or a model id)
 
 
 class MockRouteRequest(BaseModel):
@@ -186,6 +197,12 @@ def create_app(settings: Optional[Settings] = None,
     mock_router = MockRouter()
     started_at = time.time()
     seen = {"logged_header_names": False}
+    v2 = None
+    claude_adapter = None
+    if settings.v2:
+        from .v2.service import V2Service  # only loaded when V2 is switched on
+        v2 = V2Service(settings, store, log, transport=router_transport)
+        claude_adapter = ClaudeCodeAdapter.from_settings(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -193,8 +210,9 @@ def create_app(settings: Optional[Settings] = None,
             transport=upstream_transport,
             timeout=httpx.Timeout(connect=10.0, read=600.0, write=60.0, pool=10.0),
         )
-        log.info("proxy started | pid=%s | router=%s | upstream=%s", os.getpid(), settings.router_mode,
-                 settings.upstream_url)
+        log.info("proxy started | pid=%s | router=%s | upstream=%s%s", os.getpid(), settings.router_mode,
+                 settings.upstream_url, " | v2 on (auto-route {})".format("on" if settings.auto_route else "off")
+                 if v2 else "")
         try:
             yield
         finally:
@@ -216,6 +234,7 @@ def create_app(settings: Optional[Settings] = None,
             "version": __version__,
             "router": settings.router_mode,
             "upstream": settings.upstream_url,
+            "v2": bool(v2),
             "sessions": store.count(),
             "uptime_seconds": round(time.time() - started_at, 1),
             "pid": os.getpid(),
@@ -224,6 +243,8 @@ def create_app(settings: Optional[Settings] = None,
     @app.post("/session/start")
     async def session_start(req: SessionStartRequest):
         store.start_session(req.session_id, req.cwd, req.source, req.model)
+        if v2 is not None:
+            v2.session_started("claude-code", req.session_id, req.source)
         log.info("session start | session=%s | source=%s | model=%s", short(req.session_id), req.source or "-",
                  req.model or "-")
         return {"ok": True, "session_id": req.session_id, "router": settings.router_mode}
@@ -240,6 +261,16 @@ def create_app(settings: Optional[Settings] = None,
         prompt = req.prompt
         if not prompt.strip():
             return JSONResponse(status_code=400, content={"ok": False, "error": "empty prompt"})
+        if v2 is not None:
+            try:
+                return await v2.recommend(client="claude-code", session_id=req.session_id, store_key=req.session_id,
+                                          prompt=prompt, turn_id=req.prompt_id, cwd=req.cwd, current_model=None,
+                                          adapter=claude_adapter, routing_enabled=req.routing)
+            except Exception as exc:  # fail open: the hook keeps the current model
+                log.exception("v2 recommend crashed | session=%s | fallback: keep current model",
+                              short(req.session_id))
+                return JSONResponse(status_code=502, content={"ok": False, "error": "router error: " +
+                                                              type(exc).__name__})
         fp = fingerprint(prompt)
         store.new_turn(req.session_id, req.prompt_id, fp)
         log.info("recommendation request | session=%s | prompt=%d chars fp=%s | router=%s",
@@ -288,6 +319,13 @@ def create_app(settings: Optional[Settings] = None,
 
     @app.post("/selection")
     async def selection(req: SelectionRequest):
+        if v2 is not None:
+            result = v2.select(client="claude-code", session_id=req.session_id, store_key=req.session_id,
+                               recommendation_id=req.recommendation_id, accepted=req.accepted,
+                               decided_by=req.decided_by, choice=req.choice, adapter=claude_adapter)
+            if not result.get("ok"):
+                return JSONResponse(status_code=409, content=result)
+            return result
         result = store.set_selection(req.session_id, req.recommendation_id, req.accepted, req.decided_by)
         if not result.get("ok"):
             log.warning("selection ignored | session=%s | %s", short(req.session_id), result.get("error"))
@@ -302,6 +340,20 @@ def create_app(settings: Optional[Settings] = None,
         result = await mock_router.recommend(req.prompt)
         return {"recommended_model": result.recommended_model, "reason": result.reason,
                 "confidence": result.confidence}
+
+    @app.get("/v2/metrics")
+    async def v2_metrics(days: float = 7.0):
+        if v2 is None:
+            return JSONResponse(status_code=404, content={"ok": False, "error": "V2 is off (MODELMATCH_ROUTER_V2)"})
+        from .v2.metrics import summarize
+        return {"ok": True, **summarize(v2.db, days, "claude-code")}
+
+    @app.get("/v2/decision/{decision_id}")
+    async def v2_decision(decision_id: str):
+        decision = v2.db.decision(decision_id) if v2 is not None else None
+        if decision is None:
+            return JSONResponse(status_code=404, content={"ok": False, "error": "unknown decision"})
+        return {"ok": True, "decision": decision}
 
     # -- Anthropic API passthrough (registered last) -----------------------------
 
@@ -321,6 +373,7 @@ def create_app(settings: Optional[Settings] = None,
         routed: Optional[Tuple[str, str, str]] = None  # (session_id, original, target)
         send_body = body
         is_messages = request.method == "POST" and path.rstrip("/") == "v1/messages"
+        measure: Optional[Tuple[str, str]] = None  # V2: (session_id, original model) of a request to measure
         if is_messages and body:
             try:
                 payload = json.loads(body)
@@ -334,6 +387,8 @@ def create_app(settings: Optional[Settings] = None,
                     log.info("first API request seen | header names=%s | session id via %s",
                              sorted({k.lower() for k, _ in headers}), how or "NOT FOUND")
                 if session_id:
+                    if v2 is not None and isinstance(original, str):
+                        measure = (session_id, original)
                     if isinstance(original, str) and not is_small_fast_model(original):
                         store.note_seen_model(session_id, original)
                     target = store.active_route(session_id)
@@ -347,6 +402,7 @@ def create_app(settings: Optional[Settings] = None,
                         elif why_not != "background helper request":
                             log.info("not routed | session=%s | model=%s | %s", short(session_id), original, why_not)
 
+        sent_at = time.monotonic()
         try:
             response = await send_upstream(request, url, headers, send_body)
             if routed and response.status_code in RETRY_WITH_ORIGINAL:
@@ -360,6 +416,8 @@ def create_app(settings: Optional[Settings] = None,
                 log.warning("fallback triggered | session=%s | upstream rejected %s with HTTP %s (%s) | retrying with %s",
                             short(session_id), target, response.status_code, " ".join(detail.split()), original)
                 store.mark_route_failed(session_id, "HTTP {} for {}".format(response.status_code, target))
+                if v2 is not None:
+                    v2.note_route_failed("claude-code", session_id)
                 routed = None
                 response = await send_upstream(request, url, headers, body)
         except httpx.HTTPError as exc:
@@ -372,7 +430,29 @@ def create_app(settings: Optional[Settings] = None,
         response_headers = {k: v for k, v in response.headers.items() if k.lower() not in HOP_BY_HOP}
         if routed:
             response_headers["x-modelmatch-routed-model"] = routed[2]
-        return StreamingResponse(response.aiter_raw(), status_code=response.status_code, headers=response_headers,
+        content = response.aiter_raw()
+        if measure is not None:
+            content = measured(content, request, response, measure, routed, sent_at, body)
+        return StreamingResponse(content, status_code=response.status_code, headers=response_headers,
                                  background=BackgroundTask(response.aclose))
+
+    def measured(content, request: Request, response, measure, routed, sent_at: float, body: bytes):
+        """V2: read the usage numbers from a copy of the stream (the bytes pass through unchanged)."""
+        session_id, original = measure
+        ttl, billing = requested_ttl(body), billing_mode(request.headers)
+        request_class = request.headers.get("x-claude-code-request-class") or (
+            "background" if is_small_fast_model(original) else None)
+        limits = rate_limits(response.headers)
+        status = response.status_code
+
+        def done(usage):
+            v2.on_usage(client="claude-code", session_id=session_id, original_model=original,
+                        sent_model=routed[2] if routed else original, routed=bool(routed), status=status, usage=usage,
+                        requested_ttl=ttl, billing=billing, request_class=request_class,
+                        latency_ms=int((time.monotonic() - sent_at) * 1000), limits=limits)
+
+        tap = UsageTap("anthropic", response.headers.get("content-encoding", ""),
+                       response.headers.get("content-type", ""), done)
+        return tap.wrap(content)
 
     return app

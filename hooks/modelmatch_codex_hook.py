@@ -126,9 +126,11 @@ def handle_user_prompt(cfg, log, data):
 
     rec, error = common.get_recommendation(cfg, log, {
         "client": CLIENT, "session_id": session_id, "turn_id": turn_id, "prompt": prompt, "cwd": data.get("cwd"),
-        "current_model": data.get("model")})
+        "current_model": data.get("model"), "routing": routing_enabled(cfg), "client_version": 2})
     if rec is None:
         return "ModelMatch couldn't get a recommendation ({}). Continuing with your current model.".format(error)
+    if isinstance(rec.get("v2"), dict):  # V2: the proxy applies the route for this turn itself
+        return common.run_v2_decision(cfg, log, CLIENT, session_id, rec)["message"]
 
     name = rec["recommended_model"]
     reason = rec.get("recommendation_reason") or ""

@@ -77,6 +77,10 @@ routing is on.
 
 ## Connecting the real cloud router
 
+> **Update (2026-10-08):** the Curvet task analyst is live (`MODELMATCH_API_URL=https://curvet.in/api/v1/chat/completions`
+> with the Curvet App key and secret), and ModelMatch V2 builds on it. See [V2-HOW-IT-WORKS.md](V2-HOW-IT-WORKS.md).
+> The notes below describe the website endpoints.
+
 Status of the live site (checked 2026-10-02):
 
 | Endpoint | Status |

@@ -12,7 +12,7 @@ from typing import Optional
 import httpx
 
 from ..config import Settings
-from ..router_client import CloudAnalyzeClient, CloudRouteClient, MockRouter
+from ..router_client import CloudAnalyzeClient, CloudRouteClient, MockRouter, build_router
 
 
 class ClientRouteClient(CloudRouteClient):
@@ -27,6 +27,8 @@ class ClientRouteClient(CloudRouteClient):
 def build_agent_router(settings: Settings, client: str, transport: Optional[httpx.AsyncBaseTransport] = None):
     if not settings.api_url:
         return MockRouter()
+    if settings.api_style == "curvet":
+        return build_router(settings, transport, client)
     if settings.api_style == "analyze":
         return CloudAnalyzeClient(settings, transport)
     return ClientRouteClient(settings, client, transport)

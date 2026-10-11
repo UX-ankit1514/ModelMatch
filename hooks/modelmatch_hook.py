@@ -4,6 +4,9 @@
 Handles two hook events (dispatching on "hook_event_name" from stdin):
   SessionStart      make sure the local proxy is running and register the session. No routing.
   UserPromptSubmit  get ONE model recommendation, ask Use / Keep, save the choice.
+                    With ModelMatch V2 on (MODELMATCH_ROUTER_V2=1) the proxy decides whether
+                    to ask at all: it stays silent, shows a short note, or asks with two
+                    choices (e.g. "Stay on Opus 5.5" / "Use Sonnet 5.5 anyway").
 
 Golden rule: this hook must never make Claude Code unusable. Every path exits
 with code 0, and stdout only ever carries one small JSON object with a
@@ -449,7 +452,7 @@ def handle_user_prompt(cfg, data):
     try:
         status, rec = http_json("POST", cfg.proxy_url + "/recommend",
                                 {"session_id": session_id, "prompt": prompt, "prompt_id": data.get("prompt_id"),
-                                 "cwd": data.get("cwd")},
+                                 "cwd": data.get("cwd"), "routing": routing_enabled(cfg), "client_version": 2},
                                 timeout=cfg.recommend_timeout)
     except ProxyError as exc:
         log.warning("fallback triggered | recommendation failed: %s | keeping current model", exc)
@@ -459,6 +462,9 @@ def handle_user_prompt(cfg, data):
         log.warning("fallback triggered | recommendation failed: HTTP %s %s | keeping current model", status, error or "")
         return "ModelMatch couldn't get a recommendation ({}). Continuing with your current model.".format(
             error or "HTTP {}".format(status))
+
+    if isinstance(rec.get("v2"), dict):
+        return handle_v2_decision(cfg, session_id, rec)
 
     name = rec["recommended_model"]
     reason = rec.get("recommendation_reason") or ""
@@ -511,6 +517,208 @@ def handle_user_prompt(cfg, data):
     log.warning("fallback triggered | confirmation UI unavailable: %s | keeping current model", detail)
     return ("ModelMatch recommends {}.{} The Use/Keep question couldn't be shown, so your current model "
             "was kept.".format(name, reason_text))
+
+
+# ---------------------------------------------------------------------------
+# ModelMatch V2: silent / note / two-choice question
+# ---------------------------------------------------------------------------
+
+
+def handle_v2_decision(cfg, session_id, rec, post=None, extra=None, logger=None):
+    """Act on a V2 decision. Returns the message for the user (or None to stay silent)."""
+    return run_v2_decision(cfg, session_id, rec, post, extra, logger)["message"]
+
+
+def run_v2_decision(cfg, session_id, rec, post=None, extra=None, logger=None):
+    """Act on a V2 decision: ask if the proxy says so, save the answer.
+
+    Returns {"message", "model_id", "model_name"}: the model that should run now
+    (None = the tool's own model) and what to tell the user. `extra` is added to the
+    /selection request (the Codex / Copilot proxy needs "client").
+    """
+    out = logger or log
+    v2 = rec["v2"]
+    intervention = v2.get("intervention")
+    out.info("v2 decision | session=%s | %s | final=%s | candidate=%s | codes=%s", short(session_id), intervention,
+             v2.get("final_model") or "-", v2.get("candidate_model") or "-", ",".join(v2.get("reason_codes") or []))
+    options = [o for o in (v2.get("options") or []) if isinstance(o, dict) and o.get("label")]
+    if intervention != "ASK" or len(options) < 2:
+        # Silent keep, a continuing task's model, or applied automatically with a short note.
+        return {"message": v2.get("note") or None, "model_id": v2.get("final_model"),
+                "model_name": v2.get("final_display")}
+    keep = next((o for o in options if not o.get("model_id")), options[-1])
+
+    choice, method, detail = choose(cfg, v2, options)
+    if choice is None:
+        choice, decided_by = keep, ("timeout" if method == "timeout" else "unavailable")
+    else:
+        decided_by = method
+    out.info("v2 choice | session=%s | %s via %s%s", short(session_id), choice.get("id"), method,
+             " | " + detail if detail else "")
+    post = post or http_json
+    payload = {"session_id": session_id, "recommendation_id": rec.get("recommendation_id"),
+               "accepted": bool(choice.get("primary")), "decided_by": decided_by,
+               "choice": choice.get("model_id") or "keep"}
+    payload.update(extra or {})
+    try:
+        code, result = post("POST", cfg.proxy_url + "/selection", payload, timeout=3)
+    except ProxyError as exc:
+        out.warning("could not save selection | %s", exc)
+        code, result = 0, None
+    running = v2.get("running_model")
+    kept = {"model_id": running, "model_name": None}
+    if decided_by == "timeout":
+        return dict(kept, message="ModelMatch: no answer within {:.0f}s, so {} was kept.".format(
+            cfg.confirm_timeout, running or "your current model"))
+    if code == 200 and isinstance(result, dict) and result.get("message"):
+        if choice.get("model_id") and result.get("applied") is False:
+            out.warning("fallback triggered | the proxy did not apply the choice | keeping current model")
+            return dict(kept, message=result["message"])
+        name = choice["label"].replace(" anyway", "")
+        name = name[4:] if name.startswith("Use ") else name
+        return {"message": result["message"], "model_id": choice.get("model_id") or running, "model_name": name}
+    if choice.get("model_id"):
+        out.warning("fallback triggered | the proxy did not apply the choice | keeping current model")
+        return dict(kept, message="ModelMatch couldn't switch the model, so your current model was kept.")
+    return dict(kept, message=None)
+
+
+def choose(cfg, v2, options):
+    """Ask the developer to pick one of two options. Returns (option or None, method, detail)."""
+    primary = next((o for o in options if o.get("primary")), options[0])
+    keep = next((o for o in options if not o.get("model_id")), options[-1])
+    if cfg.confirm_ui == "auto-accept":
+        return primary, "auto-accept", ""
+    if cfg.confirm_ui == "never":
+        return keep, "never", ""
+    methods = {"tty": ["tty"], "dialog": ["dialog"]}.get(cfg.confirm_ui, ["tty", "dialog"])
+    problems = []
+    for method in methods:
+        ask = _choose_tty if method == "tty" else _choose_dialog
+        picked, detail = ask(v2, options, primary, keep, cfg.confirm_timeout)
+        if picked == "timeout":
+            return None, "timeout", detail
+        if picked != "unavailable":
+            return picked, method, detail
+        problems.append(detail)
+    return None, "unavailable", "; ".join(problems)
+
+
+def _choice_message(v2):
+    parts = [v2.get("headline") or "ModelMatch"]
+    for key in ("explanation", "cost_note"):
+        if v2.get(key):
+            parts.append(v2[key])
+    return "\n\n".join(parts)
+
+
+def _choose_tty(v2, options, primary, keep, timeout):
+    try:
+        fd = os.open("/dev/tty", os.O_RDWR | getattr(os, "O_NOCTTY", 0))
+    except OSError as exc:
+        return "unavailable", "no terminal ({})".format(exc.strerror or exc)
+    import termios
+    import tty
+
+    other = next(o for o in options if o is not primary)
+    old = None
+    picked = "timeout"
+    try:
+        try:
+            old = termios.tcgetattr(fd)
+        except termios.error:
+            old = None
+        text = "\r\n".join(["", "  ModelMatch"] + ["  " + line for line in _choice_message(v2).split("\n")] +
+                            ["", "  [Enter] {}   [2] {}   [Esc] {} ".format(primary["label"], other["label"],
+                                                                            keep["label"])])
+        os.write(fd, text.encode("utf-8"))
+        if old is not None:
+            tty.setcbreak(fd)
+            termios.tcflush(fd, termios.TCIFLUSH)
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            ready, _, _ = select.select([fd], [], [], remaining)
+            if not ready:
+                break
+            key = os.read(fd, 1)
+            if not key:
+                break
+            if key in (b"\r", b"\n", b"1", b"y", b"Y"):
+                picked = primary
+                break
+            if key == b"2":
+                picked = other
+                break
+            if key in (b"\x1b", b"\x03", b"\x04", b"n", b"N"):
+                picked = keep
+                break
+        os.write(fd, ((picked["label"] if isinstance(picked, dict) else "no answer, keeping current model")
+                      + "\r\n").encode("utf-8"))
+        return picked, "terminal"
+    except OSError as exc:
+        return "unavailable", "terminal error ({})".format(exc)
+    finally:
+        if old is not None:
+            try:
+                termios.tcsetattr(fd, termios.TCSANOW, old)
+            except termios.error:
+                pass
+        os.close(fd)
+
+
+_CHOICE_SCRIPT = [
+    "on run argv",
+    "set theMessage to item 1 of argv",
+    "set primaryLabel to item 2 of argv",
+    "set otherLabel to item 3 of argv",
+    "set keepLabel to item 4 of argv",
+    "set waitSeconds to (item 5 of argv) as integer",
+    'display dialog theMessage with title "ModelMatch" buttons {otherLabel, primaryLabel} '
+    "default button primaryLabel cancel button keepLabel giving up after waitSeconds with icon note",
+    "set answer to result",
+    'if gave up of answer then return "TIMEOUT"',
+    'return "BUTTON:" & (button returned of answer)',
+    "end run",
+]
+
+
+def _choose_dialog(v2, options, primary, keep, timeout):
+    if sys.platform != "darwin" or not shutil.which("osascript"):
+        return "unavailable", "macOS popup not available"
+    other = next(o for o in options if o is not primary)
+    labels = [o["label"] if len(o["label"]) <= 34 else o["label"][:33] + "…" for o in (primary, other, keep)]
+    command = ["osascript"]
+    for line in _CHOICE_SCRIPT:
+        command += ["-e", line]
+    command += ["--", _choice_message(v2), labels[0], labels[1], labels[2], str(int(timeout))]
+    process = None
+    try:
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, universal_newlines=True)
+        out, err = process.communicate(timeout=timeout + 10)
+    except subprocess.TimeoutExpired:
+        return "timeout", "popup"
+    except OSError as exc:
+        return "unavailable", "popup failed to open ({})".format(exc)
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()  # never leave a popup behind
+    out = (out or "").strip()
+    if process.returncode != 0:
+        if "-128" in (err or ""):  # Esc / the keep button
+            return keep, "popup"
+        return "unavailable", "popup failed ({})".format(" ".join((err or "").split())[:120])
+    if out == "TIMEOUT":
+        return "timeout", "popup"
+    if out.startswith("BUTTON:"):
+        pressed = out[len("BUTTON:"):]
+        for option, label in zip((primary, other, keep), labels):
+            if pressed == label:
+                return option, "popup"
+    return "unavailable", "popup gave an unexpected answer"
 
 
 def claim(cfg, event, data):

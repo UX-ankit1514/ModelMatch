@@ -5,6 +5,7 @@ key, timeouts, log folder, prompt logging). Only what has to differ has its own 
 
     MODELMATCH_AGENTS_PORT         default 8788 (the Claude Code proxy keeps 8787)
     MODELMATCH_AGENTS_STATE_FILE   default state/agents-sessions.json
+    MODELMATCH_AGENTS_DB_FILE      default state/agents-modelmatch.db (V2's memory for Codex / Copilot)
     MODELMATCH_CODEX_UPSTREAM_URL  where Codex's model requests go (empty = automatic)
     MODELMATCH_CODEX_HOME          Codex's settings folder (default $CODEX_HOME or ~/.codex)
     MODELMATCH_<TOOL>_<SIZE>_MODEL pin the model used for a size, e.g.
@@ -53,7 +54,8 @@ def get_agent_settings(env: Optional[Dict[str, str]] = None, root: Path = PROJEC
     base = replace(get_settings(env=merged, root=root),
                    port=_int(get("MODELMATCH_AGENTS_PORT"), DEFAULT_AGENTS_PORT),
                    state_file=Path(get("MODELMATCH_AGENTS_STATE_FILE",
-                                       str(root / "state" / "agents-sessions.json"))))
+                                       str(root / "state" / "agents-sessions.json"))),
+                   db_file=Path(get("MODELMATCH_AGENTS_DB_FILE", str(root / "state" / "agents-modelmatch.db"))))
     overrides = {}
     for client in CLIENTS:
         picks = {tier: get("MODELMATCH_{}_{}_MODEL".format(client.upper(), tier.upper())) for tier in TIERS}

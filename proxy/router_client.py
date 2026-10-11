@@ -7,6 +7,8 @@
 * CloudAnalyzeClient  - adapter for the endpoint the live site exposes today:
                           POST /api/analyze {"prompt": "..."} -> chat completion whose text
                           contains "SECTION 1: RECOMMENDED MODEL <model> <tier> - <reason>".
+* AnalyzerRouter      - (MODELMATCH_API_STYLE=curvet) the V2 semantic task analyst
+                          (proxy/v2/analyzer.py) answering as a V1 router.
 """
 
 import re
@@ -28,6 +30,7 @@ class RouterResult:
     reason: str
     confidence: Optional[float]
     source: str
+    tier: Optional[str] = None  # light | standard | heavy, when the router thinks in capability tiers
 
 
 class RouterError(Exception):
@@ -208,9 +211,13 @@ class CloudAnalyzeClient(_CloudClient):
         return RouterResult(_validate_model_name(model), _clean_reason(reason), None, self.source)
 
 
-def build_router(settings: Settings, transport: Optional[httpx.AsyncBaseTransport] = None):
+def build_router(settings: Settings, transport: Optional[httpx.AsyncBaseTransport] = None,
+                 client: str = CLIENT_NAME):
     if not settings.api_url:
         return MockRouter()
+    if settings.api_style == "curvet":
+        from .v2.analyzer import AnalyzerRouter, CurvetAnalyzer  # late import: v2 builds on this module
+        return AnalyzerRouter(CurvetAnalyzer(settings, transport), client)
     if settings.api_style == "analyze":
         return CloudAnalyzeClient(settings, transport)
     return CloudRouteClient(settings, transport)
