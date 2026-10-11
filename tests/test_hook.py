@@ -43,6 +43,7 @@ def base_env(tmp_path, port, **extra):
         "MODELMATCH_CONFIRM_UI": "never",
         "MODELMATCH_CONFIRM_TIMEOUT": "3",
         "MODELMATCH_DISABLED": "0",
+        "MODELMATCH_ROUTER_V2": "0",  # V1 behaviour, regardless of the local .env
         "MODELMATCH_LOG_PROMPTS": "0",
     })
     env.update({k: str(v) for k, v in extra.items()})
